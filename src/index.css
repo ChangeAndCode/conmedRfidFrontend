@@ -1,15 +1,17 @@
 :root {
   background-color: rgb(211, 211, 211);
   margin: 0;
-  height: auto;
+  height: 100%;
   @media (max-width: 1024px) {
   }
 }
 
 body{
+
   display: flex;
   align-items: center;
   justify-content: center;
+  height: 100%;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -33,4 +35,11 @@ h2 {
 }
 p {
   font-size: small;
+}
+
+.square{
+  background-color: rgb(86, 86, 86);
+  padding: 50px;
+  width: 600px;
+  height: 600px;
 }
