@@ -1,4 +1,5 @@
 ﻿import type {User} from '../types/Auth';
+import '../css/loginModal.css';
 
 type LoginModalProps ={
   onClose:()=> void;

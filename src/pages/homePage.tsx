@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import LoginModal from '../components/loginModal';
-import {useNavigate, Link} from 'react-router-dom'
+import {useNavigate, Link} from 'react-router-dom';
+import '../css/homePage.css';
 
-type Station = "programacion" | "verificacion";
+type Station = "programming" | "verification";
 
 function homePage() {
   const [showLogin, setShowLogin] = useState(false);
@@ -13,17 +14,15 @@ function homePage() {
     setStation(s);
     setShowLogin(true);
   }
-  
   return (
     <>
       <section className='square'>
         <div >
           <h1>Estación de RFID</h1>
-          <button onClick={()=> handleStationClick("programacion")}>
+          <button onClick={()=> handleStationClick("programming")}>
             <h2>Estación de programación</h2>
           </button>
-          
-          <button onClick={()=> handleStationClick("verificacion")}>
+          <button onClick={()=> handleStationClick("verification")}>
             <h2>Estación de verificación</h2>
           </button>
           <p>
@@ -31,7 +30,6 @@ function homePage() {
           </p>
         </div>
       </section>
-
       {/* Modals */}
       {showLogin && 
           <LoginModal 
@@ -40,8 +38,8 @@ function homePage() {
               console.log("Usuario: ", user);
               setShowLogin(false);
 
-              if (station === "programacion") navigate("/programmingDashboard");
-              if (station === "verificacion") navigate("/verificationDashboard");
+              if (station === "programming") navigate("/programmingDashboard");
+              if (station === "verification") navigate("/verificationDashboard");
               if (!station) return;
             }}
           />
