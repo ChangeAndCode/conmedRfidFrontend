@@ -1,0 +1,29 @@
+.modalOverLayer{
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.modalContent{
+    display: grid;
+        background-color: white;
+    width: 600px;
+    height: 600px;
+    padding: 50px;
+    border-radius: 30px;
+    align-content: start;
+    gap: 10px;
+}
+.modalContent div{
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    align-items: center;
+    gap: 20px;
+}
+.modalContent input{
+    height: 30px;
+}

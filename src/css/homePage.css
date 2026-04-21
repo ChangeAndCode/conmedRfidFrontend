@@ -1,0 +1,46 @@
+.homePage{
+    display: flex;
+    flex-direction: column;
+    justify-content: baseline;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+.titleBlock{
+    width: 100%;
+}
+.titleBlock div{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.titleBlock h1{
+    font-size:40px;
+}
+.titleBlock img{
+    min-width: auto;
+    height: 25px;
+}
+
+.homeSelector{
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    gap: 50px;
+}
+.buttonHomeSelector{
+  margin: 0 0 5 0;
+  padding: 0;
+  width: 250px;
+  height: 75px;
+  color: white;
+  background-color: rgba(0, 83, 249);
+  border: 0 none;
+  border-radius: 10px;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+.buttonHomeSelector:hover{
+    color: black;
+  background-color: rgba(255, 255, 255);
+}
+
