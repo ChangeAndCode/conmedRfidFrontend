@@ -2,7 +2,7 @@
 function administrationDashboardPage(){
     return(
         <>
-            <section>
+            <section className="square">
                 <div>
                     <h1>Administrador</h1>
                 </div>

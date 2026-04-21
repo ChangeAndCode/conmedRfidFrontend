@@ -1,21 +1,13 @@
-﻿import { useState } from 'react';
-import {useNavigate} from 'react-router-dom';
-import type {User} from '../types/Auth';
-import RegisterModal from './registerModal';
+﻿import type {User} from '../types/Auth';
 import '../css/loginModal.css';
 
 type LoginModalProps ={
   onClose:()=> void;
   onSuccess: (user:User) => void;
+  onOpenRegister: ()=> void;
 };
 
 function LoginModal({onClose, onSuccess}: LoginModalProps) {
-  const[showRegister, setShowRegister] = useState(false);
-  const navigate = useNavigate();
-
-  const handleSubmit =()=>{
-    setShowRegister(true);
-  }
 
   const user:User={
     id: "1",
@@ -47,22 +39,13 @@ function LoginModal({onClose, onSuccess}: LoginModalProps) {
           </div>
           <div>
             <h2>Registro nuevo usuario</h2>
-            <button onClick={handleSubmit} className='buttonSelector'>Registrar Usuario</button>
+            
           </div>
         </div>
       </div>
     </section>
     {/* Modals */}
-    {showRegister && 
-        <RegisterModal 
-          onClose={()=> setShowRegister(false)}
-          onSuccess={(user)=>{
-            console.log("Usuario: ", user);
-            navigate("/administratorDashboard")
-            setShowRegister(false);
-          }}
-        />
-      }
+    
     </>
   )
 }
