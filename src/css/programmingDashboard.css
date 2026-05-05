@@ -19,7 +19,8 @@
     width: 100%;
     display: flex;
     justify-content:center;
-    gap: 50px;
+    flex-wrap: wrap;
+    gap: 20px;
 }
 
 .modalOverlay{
@@ -79,6 +80,7 @@
 .manualHint{
     font-size: 14px;
     color: #414141;
+    text-align: center;
 }
 
 .manualMessage{
@@ -102,4 +104,27 @@
 
 .modalSubmitButton{
     width: 180px;
+}
+
+.scanSummaryBlock{
+    width: 100%;
+    max-width: 360px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 18px;
+    border-radius: 12px;
+    background-color: rgba(255, 255, 255, 0.75);
+    border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.scanResultBlock{
+    background-color: #edf7ff;
+}
+
+.modalActionRow{
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    flex-wrap: wrap;
 }
