@@ -1,43 +1,170 @@
-import type {User} from '../types/Auth';
+import { useState, type FormEvent } from 'react';
 import '../css/loginModal.css';
+import { registerUser } from '../services/authService';
+import type { RegisterPayload, User } from '../types/Auth';
 
 type RegisterModalProps = {
   onClose: () => void;
   onSuccess: (user: User) => void;
 };
 
-function RegisterModal({onClose, onSuccess}: RegisterModalProps) {
-  const user: User = {
-    id: "1",
-    username: "changeandcode",
-    password: "cac",
-    email: "contacto@changeandcode.com",
-    role: "admin"
+type RegisterFormValues = RegisterPayload & {
+  confirmPassword: string;
+};
+
+const INITIAL_FORM_VALUES: RegisterFormValues = {
+  username: '',
+  email: '',
+  password: '',
+  confirmPassword: '',
+};
+
+function RegisterModal({ onClose, onSuccess }: RegisterModalProps) {
+  const [formValues, setFormValues] = useState<RegisterFormValues>(INITIAL_FORM_VALUES);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const username = formValues.username.trim();
+    const email = formValues.email.trim();
+    const password = formValues.password.trim();
+    const confirmPassword = formValues.confirmPassword.trim();
+
+    if (!username || !email || !password || !confirmPassword) {
+      setErrorMessage('Completa nombre de usuario, correo y contrasena.');
+      return;
+    }
+
+    if (password.length < 8) {
+      setErrorMessage('La contrasena debe tener al menos 8 caracteres.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setErrorMessage('La confirmacion de contrasena no coincide.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    try {
+      const user = await registerUser({
+        username,
+        email,
+        password,
+      });
+
+      onSuccess(user);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'No se pudo conectar con el backend.',
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <section>
-      <div className='modalOverLayer'>
-        <div className='modalContent'>
-          <div>
-            <h1>Registro</h1>
-          </div>
-          <h2>Username</h2>
-          <input placeholder="changeAndCode"></input>
-          <h2>Password</h2>
-          <input placeholder="contrasena01"></input>
-          <h2>email</h2>
-          <input placeholder="contacto@changeandcode.com"></input>
-          <h2>role</h2>
-          <input placeholder="admin"></input>
-          <div className=''>
-            <button className='buttonSelector' onClick={() => onSuccess(user)}>Registrar</button>
-            <button className='buttonSelector' onClick={onClose}>Cerrar</button>
-          </div>
+      <div className='modalOverLayer' onClick={isSubmitting ? undefined : onClose}>
+        <div className='modalContent' onClick={(event) => event.stopPropagation()}>
+          <form onSubmit={handleSubmit} className='modalFormContent'>
+            <div>
+              <h1>Registro</h1>
+            </div>
+
+            <label className='modalField'>
+              <span>Username</span>
+              <input
+                type='text'
+                value={formValues.username}
+                placeholder='gibran'
+                autoComplete='username'
+                onChange={(event) =>
+                  setFormValues((currentValues) => ({
+                    ...currentValues,
+                    username: event.target.value,
+                  }))
+                }
+                disabled={isSubmitting}
+                required
+              />
+            </label>
+
+            <label className='modalField'>
+              <span>Email</span>
+              <input
+                type='email'
+                value={formValues.email}
+                placeholder='gibran@empresa.com'
+                autoComplete='email'
+                onChange={(event) =>
+                  setFormValues((currentValues) => ({
+                    ...currentValues,
+                    email: event.target.value,
+                  }))
+                }
+                disabled={isSubmitting}
+                required
+              />
+            </label>
+
+            <label className='modalField'>
+              <span>Password</span>
+              <input
+                type='password'
+                value={formValues.password}
+                placeholder='12345678'
+                autoComplete='new-password'
+                minLength={8}
+                onChange={(event) =>
+                  setFormValues((currentValues) => ({
+                    ...currentValues,
+                    password: event.target.value,
+                  }))
+                }
+                disabled={isSubmitting}
+                required
+              />
+            </label>
+
+            <label className='modalField'>
+              <span>Confirmar Password</span>
+              <input
+                type='password'
+                value={formValues.confirmPassword}
+                placeholder='12345678'
+                autoComplete='new-password'
+                minLength={8}
+                onChange={(event) =>
+                  setFormValues((currentValues) => ({
+                    ...currentValues,
+                    confirmPassword: event.target.value,
+                  }))
+                }
+                disabled={isSubmitting}
+                required
+              />
+            </label>
+
+            {errorMessage && <p className='modalMessage error'>{errorMessage}</p>}
+
+            <div>
+              <button className='buttonSelector' type='submit' disabled={isSubmitting}>
+                {isSubmitting ? 'Registrando...' : 'Registrar'}
+              </button>
+              <button className='buttonSelector' type='button' onClick={onClose} disabled={isSubmitting}>
+                Cerrar
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </section>
-  )
+  );
 }
 
 export default RegisterModal;

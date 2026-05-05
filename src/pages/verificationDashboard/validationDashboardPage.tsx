@@ -1,12 +1,13 @@
-function validationDashboardPage() {
+function ValidationDashboardPage() {
   return (
     <>
       <section className='square'>
-        <div >
-          <h1>ESTACIÓN DE VERIFICACIÓN</h1>
+        <div>
+          <h1>{'ESTACI\u00d3N DE VERIFICACI\u00d3N'}</h1>
         </div>
       </section>
     </>
-  )
+  );
 }
-export default validationDashboardPage;
+
+export default ValidationDashboardPage;

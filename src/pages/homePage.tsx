@@ -1,68 +1,122 @@
 import { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import LoginModal from '../components/loginModal';
-import {useNavigate} from 'react-router-dom';
-import '../css/homePage.css';
-import LogoConmed from "../assets/conmedImages/conmed_logo_2.png";
 import RegisterModal from '../components/registerModal';
+import { useAuth } from '../context/AuthContext';
+import LogoConmed from '../assets/conmedImages/conmed_logo_2.png';
+import '../css/homePage.css';
+import type { AuthSession } from '../types/Auth';
 
-function homePage() {
-  const [activeModal, setActiveModal] = useState<"login" | "register" | null>(null);
+type RedirectState = {
+  from?: {
+    pathname?: string;
+  };
+};
 
+function HomePage() {
+  const [activeModal, setActiveModal] = useState<'login' | 'register' | null>(null);
+  const [loginPrefillEmail, setLoginPrefillEmail] = useState('');
+  const [loginFeedbackMessage, setLoginFeedbackMessage] = useState<string | null>(null);
   const navigate = useNavigate();
+  const location = useLocation();
+  const { isAdmin, logout, setAuthSession, user } = useAuth();
+
+  const redirectPath =
+    (location.state as RedirectState | null)?.from?.pathname ?? '/administratorDashboard';
+
+  const handleLoginSuccess = (session: AuthSession) => {
+    setLoginPrefillEmail('');
+    setLoginFeedbackMessage(null);
+    setAuthSession(session);
+    setActiveModal(null);
+    navigate(redirectPath, { replace: true });
+  };
+
+  const openLoginModal = (options?: { email?: string; message?: string | null }) => {
+    setLoginPrefillEmail(options?.email ?? '');
+    setLoginFeedbackMessage(options?.message ?? null);
+    setActiveModal('login');
+  };
+
+  const closeLoginModal = () => {
+    setLoginPrefillEmail('');
+    setLoginFeedbackMessage(null);
+    setActiveModal(null);
+  };
 
   return (
     <>
       <section className='square'>
         <div className='titleBlock'>
           <div>
-            <h1>Estación de RFID</h1>
-            <img src={LogoConmed} alt='conmedLogo'/>
+            <h1>{'Estaci\u00f3n de RFID'}</h1>
+            <img src={LogoConmed} alt='conmedLogo' />
           </div>
-          <p>
-            Estación diseñada para procesos dedicados de ConMed
-          </p>
+          <p>{'Estaci\u00f3n dise\u00f1ada para procesos dedicados de ConMed'}</p>
         </div>
+
         <div className='homePage'>
           <div className='homeSelector'>
-            <button className='buttonHomeSelector' onClick={()=> navigate('/programmingDashboard')}>
-            <h2>Programación</h2>
+            <button className='buttonHomeSelector' onClick={() => navigate('/programmingDashboard')}>
+              <h2>{'Programaci\u00f3n'}</h2>
             </button>
-            <button className='buttonHomeSelector' onClick={()=> navigate('/verificationDashboard')}>
-              <h2>Verificación</h2>
+            <button className='buttonHomeSelector' onClick={() => navigate('/verificationDashboard')}>
+              <h2>{'Verificaci\u00f3n'}</h2>
             </button>
           </div>
         </div>
-        <div className='loginRegisterSelection'>
-          <button onClick={()=> setActiveModal("login")} className='buttonSelector'>Iniciar Sesión</button>
-          <button onClick={()=>setActiveModal("register")} className='buttonSelector'>Registrar Usuario</button>
-        </div>
+
+        {isAdmin ? (
+          <div className='loginRegisterSelection'>
+            <button onClick={() => navigate('/administratorDashboard')} className='buttonSelector'>
+              Panel Administrador
+            </button>
+            <button
+              onClick={() => {
+                logout();
+                closeLoginModal();
+              }}
+              className='buttonSelector'
+            >
+              {'Cerrar Sesi\u00f3n'}
+            </button>
+            <p className='sessionStatus'>{`Sesi\u00f3n activa: ${user?.username ?? ''}`}</p>
+          </div>
+        ) : (
+          <div className='loginRegisterSelection'>
+            <button onClick={() => openLoginModal()} className='buttonSelector'>
+              {'Iniciar Sesi\u00f3n'}
+            </button>
+            <button onClick={() => setActiveModal('register')} className='buttonSelector'>
+              Registrar Usuario
+            </button>
+          </div>
+        )}
       </section>
-      {/* Modals */}
-      {
-        activeModal === "login" &&(
-          <LoginModal 
-            onClose={()=> setActiveModal(null)}
-            onOpenRegister={()=> setActiveModal("register")}
-            onSuccess={(user)=>{
-              console.log("Usuario: ", user);
-              setActiveModal(null);
-              navigate('/administratorDashboard');
-            }}
-          />
-        )
-      }
-      {activeModal === "register" &&(
-        <RegisterModal 
-        onClose={()=> setActiveModal(null)}
-        onSuccess={(user)=>{
-          console.log("Usuario: ", user);
-          setActiveModal("login");
+
+      {activeModal === 'login' && (
+        <LoginModal
+          onClose={closeLoginModal}
+          onOpenRegister={() => setActiveModal('register')}
+          onSuccess={handleLoginSuccess}
+          initialEmail={loginPrefillEmail}
+          feedbackMessage={loginFeedbackMessage}
+        />
+      )}
+
+      {activeModal === 'register' && (
+        <RegisterModal
+          onClose={() => setActiveModal(null)}
+          onSuccess={(nextUser) => {
+            openLoginModal({
+              email: nextUser.email,
+              message: 'Usuario registrado correctamente. Ahora inicia sesion.',
+            });
           }}
         />
-        )
-      }
+      )}
     </>
-  )
+  );
 }
 
-export default homePage;
+export default HomePage;

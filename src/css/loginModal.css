@@ -5,18 +5,25 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
+    background-color: rgba(0, 0, 0, 0.35);
 }
 
 .modalContent{
     display: grid;
-        background-color: white;
+    background-color: white;
     width: 600px;
-    height: 600px;
+    min-height: 420px;
     padding: 50px;
     border-radius: 30px;
     align-content: start;
     gap: 10px;
 }
+
+.modalFormContent{
+    display: grid;
+    gap: 16px;
+}
+
 .modalContent div{
     display: flex;
     flex-direction: column;
@@ -24,6 +31,31 @@
     align-items: center;
     gap: 20px;
 }
+
 .modalContent input{
     height: 30px;
+    width: 100%;
+}
+
+.modalField{
+    display: grid;
+    gap: 8px;
+}
+
+.modalField span{
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.modalMessage{
+    margin: 0;
+    font-size: 16px;
+}
+
+.modalMessage.success{
+    color: #2e7d32;
+}
+
+.modalMessage.error{
+    color: #c62828;
 }
