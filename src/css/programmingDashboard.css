@@ -21,3 +21,85 @@
     justify-content:center;
     gap: 50px;
 }
+
+.modalOverlay{
+    position: fixed;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.25);
+    z-index: 1000;
+}
+
+.modalSquare{
+    justify-content: center;
+    gap: 16px;
+    max-width: calc(100vw - 40px);
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+}
+
+.modalHeader{
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+
+.modalForm{
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.modalField{
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+.modalField span{
+    font-weight: 700;
+}
+
+.modalForm input,
+.modalForm select{
+    width: 240px;
+    padding: 8px 10px;
+    border: 1px solid #8f8f8f;
+    border-radius: 8px;
+}
+
+.manualHint{
+    font-size: 14px;
+    color: #414141;
+}
+
+.manualMessage{
+    width: 100%;
+    max-width: 320px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 14px;
+}
+
+.manualMessage.success{
+    background-color: #dff3e3;
+    color: #185b2d;
+}
+
+.manualMessage.error{
+    background-color: #f8dfdf;
+    color: #8b1e1e;
+}
+
+.modalSubmitButton{
+    width: 180px;
+}
