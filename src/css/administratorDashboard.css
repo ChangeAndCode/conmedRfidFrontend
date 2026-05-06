@@ -1,0 +1,296 @@
+.square.adminDashboard {
+    box-sizing: border-box;
+    width: min(1440px, calc(100vw - 64px));
+    max-width: min(1440px, calc(100vw - 64px));
+    min-height: 760px;
+    height: auto;
+    padding: 36px 42px;
+    align-items: stretch;
+    gap: 28px;
+}
+
+.adminHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+
+.adminHeaderCopy {
+    display: grid;
+    gap: 10px;
+}
+
+.adminSessionBox {
+    display: grid;
+    gap: 6px;
+    justify-items: end;
+}
+
+.adminToolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.adminToolbarActions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.adminTableCard {
+    display: grid;
+    gap: 14px;
+    padding: 20px 24px;
+    border-radius: 20px;
+    background-color: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.adminTableHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.adminTableMeta {
+    font-size: 14px;
+    color: #4d4d4d;
+}
+
+.adminMessage {
+    padding: 12px 14px;
+    border-radius: 12px;
+    font-size: 14px;
+}
+
+.adminMessage.info {
+    background-color: #e8f1ff;
+    color: #11408a;
+}
+
+.adminMessage.success {
+    background-color: #dff3e3;
+    color: #185b2d;
+}
+
+.adminMessage.error {
+    background-color: #fde8e8;
+    color: #8d1f1f;
+}
+
+.adminTableWrapper {
+    overflow-x: auto;
+}
+
+.adminTable {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 1120px;
+}
+
+.adminTable th,
+.adminTable td {
+    padding: 14px 12px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    text-align: left;
+    font-size: 14px;
+}
+
+.adminTable th {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #505050;
+}
+
+.adminTable tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.adminBadge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 96px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.adminBadge.active {
+    background-color: #dff3e3;
+    color: #185b2d;
+}
+
+.adminBadge.inactive {
+    background-color: #f0f0f0;
+    color: #5c5c5c;
+}
+
+.adminActionRow {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.adminActionButton {
+    width: 88px;
+    height: 32px;
+    border-radius: 10px;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    background-color: white;
+    cursor: pointer;
+}
+
+.adminActionButton:hover {
+    background-color: #f0f4ff;
+}
+
+.adminActionButton.delete:hover {
+    background-color: #fde8e8;
+}
+
+.adminTableEmpty {
+    padding: 28px 0;
+    text-align: center;
+    color: #4d4d4d;
+}
+
+.adminModalOverlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 24px;
+    background-color: rgba(0, 0, 0, 0.35);
+    z-index: 1100;
+}
+
+.adminModalCard {
+    width: min(820px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    display: grid;
+    gap: 20px;
+    padding: 28px;
+    border-radius: 24px;
+    background-color: rgba(255, 255, 255, 0.97);
+}
+
+.adminConfirmCard {
+    width: min(480px, calc(100vw - 32px));
+}
+
+.adminModalHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.adminModalTitleBlock {
+    display: grid;
+    gap: 8px;
+}
+
+.adminForm {
+    display: grid;
+    gap: 16px;
+}
+
+.adminFormGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.adminField {
+    display: grid;
+    gap: 8px;
+}
+
+.adminFieldFull {
+    grid-column: 1 / -1;
+}
+
+.adminField span {
+    font-weight: 700;
+}
+
+.adminField input,
+.adminField select,
+.adminField textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border: 1px solid rgba(0, 0, 0, 0.18);
+    border-radius: 12px;
+    font: inherit;
+    background-color: white;
+}
+
+.adminField textarea {
+    resize: vertical;
+}
+
+.adminCheckboxRow {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.adminFieldHint {
+    font-size: 14px;
+    color: #4d4d4d;
+}
+
+.adminModalFooter {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.adminConfirmActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.buttonSelector.adminDangerButton {
+    border-color: #a22222;
+    background-color: #ffe6e6;
+    color: #7f1515;
+}
+
+.buttonSelector.adminDangerButton:hover:enabled {
+    background-color: #ffd4d4;
+}
+
+@media (max-width: 1024px) {
+    .square.adminDashboard {
+        width: calc(100vw - 24px);
+        max-width: calc(100vw - 24px);
+        height: auto;
+        padding: 24px;
+    }
+
+    .adminSessionBox {
+        justify-items: start;
+    }
+
+    .adminFormGrid {
+        grid-template-columns: 1fr;
+    }
+}
