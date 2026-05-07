@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import LoginModal from '../components/loginModal';
+import ProgrammingDashboardParticleBackground from '../components/programmingDashboardParticleBackground';
 import RegisterModal from '../components/registerModal';
 import { useAuth } from '../context/AuthContext';
 import LogoConmed from '../assets/conmedImages/conmed_logo_2.png';
@@ -46,53 +47,61 @@ function HomePage() {
 
   return (
     <>
-      <section className='square'>
-        <div className='titleBlock'>
-          <div>
-            <h1>{'Estaci\u00f3n de RFID'}</h1>
-            <img src={LogoConmed} alt='conmedLogo' />
-          </div>
-          <p>{'Estaci\u00f3n dise\u00f1ada para procesos dedicados de ConMed'}</p>
-        </div>
+      <main className='homePageScene'>
+        <ProgrammingDashboardParticleBackground />
+        <div className='homePageBackdropGlow homePageBackdropGlowPrimary' aria-hidden='true' />
+        <div className='homePageBackdropGlow homePageBackdropGlowSecondary' aria-hidden='true' />
 
-        <div className='homePage'>
-          <div className='homeSelector'>
-            <button className='buttonHomeSelector' onClick={() => navigate('/programmingDashboard')}>
-              <h2>{'Programaci\u00f3n'}</h2>
-            </button>
-            <button className='buttonHomeSelector' onClick={() => navigate('/verificationDashboard')}>
-              <h2>{'Verificaci\u00f3n'}</h2>
-            </button>
-          </div>
-        </div>
+        <section className='square homePageShell'>
+          <div className='homePageCard'>
+            <div className='titleBlock'>
+              <div>
+                <h1>{'Estaci\u00f3n de RFID'}</h1>
+                <img src={LogoConmed} alt='conmedLogo' />
+              </div>
+              <p>{'Estaci\u00f3n dise\u00f1ada para procesos dedicados de ConMed'}</p>
+            </div>
 
-        {isAdmin ? (
-          <div className='loginRegisterSelection'>
-            <button onClick={() => navigate('/administratorDashboard')} className='buttonSelector'>
-              Panel Administrador
-            </button>
-            <button
-              onClick={() => {
-                logout();
-                closeLoginModal();
-              }}
-              className='buttonSelector'
-            >
-              {'Cerrar Sesi\u00f3n'}
-            </button>
-            <p className='sessionStatus'>{`Sesi\u00f3n activa: ${user?.username ?? ''}`}</p>
+            <div className='homePage'>
+              <div className='homeSelector'>
+                <button className='buttonHomeSelector' onClick={() => navigate('/programmingDashboard')}>
+                  <h2>{'Programaci\u00f3n'}</h2>
+                </button>
+                <button className='buttonHomeSelector' onClick={() => navigate('/verificationDashboard')}>
+                  <h2>{'Verificaci\u00f3n'}</h2>
+                </button>
+              </div>
+            </div>
+
+            {isAdmin ? (
+              <div className='loginRegisterSelection'>
+                <button onClick={() => navigate('/administratorDashboard')} className='buttonSelector'>
+                  Panel Administrador
+                </button>
+                <button
+                  onClick={() => {
+                    logout();
+                    closeLoginModal();
+                  }}
+                  className='buttonSelector'
+                >
+                  {'Cerrar Sesi\u00f3n'}
+                </button>
+                <p className='sessionStatus'>{`Sesi\u00f3n activa: ${user?.username ?? ''}`}</p>
+              </div>
+            ) : (
+              <div className='loginRegisterSelection'>
+                <button onClick={() => openLoginModal()} className='buttonSelector'>
+                  {'Iniciar Sesi\u00f3n'}
+                </button>
+                <button onClick={() => setActiveModal('register')} className='buttonSelector'>
+                  Registrar Usuario
+                </button>
+              </div>
+            )}
           </div>
-        ) : (
-          <div className='loginRegisterSelection'>
-            <button onClick={() => openLoginModal()} className='buttonSelector'>
-              {'Iniciar Sesi\u00f3n'}
-            </button>
-            <button onClick={() => setActiveModal('register')} className='buttonSelector'>
-              Registrar Usuario
-            </button>
-          </div>
-        )}
-      </section>
+        </section>
+      </main>
 
       {activeModal === 'login' && (
         <LoginModal

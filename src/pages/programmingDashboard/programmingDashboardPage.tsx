@@ -2,6 +2,7 @@ import '../../css/programmingDashboard.css';
 import '../../index.css';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import ProgrammingDashboardParticleBackground from '../../components/programmingDashboardParticleBackground';
 import { createDoubleScanRead, resolveFirstDoubleScan } from '../../services/doubleScanService';
 import type {
   DoubleScanReadResponse,
@@ -418,38 +419,47 @@ function ProgrammingDashboardPage() {
 
   return (
     <>
-      <section className='square'>
-        <div className='generalBlock'>
-          <h1>ESTACION DE PROGRAMACION</h1>
-          <div className='statusUser'>
-            <h2>serial port: {port || 'sin seleccionar'}</h2>
-            <h2>status: {port ? 'listo para escanear' : 'selecciona un serial port'}</h2>
-            <h2>fecha/hora: pendiente</h2>
-          </div>
-          <div>
-            <h2>Serial Port</h2>
-            <select aria-label='SerialPort' value={port} onChange={(event) => setPort(event.target.value)}>
-              <option value=''>Selecciona</option>
-              <option value='port1'>COM 3</option>
-              <option value='port2'>COM 5</option>
-            </select>
-          </div>
-          <div className='buttonBox'>
-            <button className='buttonSelector' onClick={openManualModal} disabled={!port}>
-              Ingreso Manual
+      <main className='programmingDashboardScene'>
+        <ProgrammingDashboardParticleBackground />
+        <div className='programmingDashboardBackdropGlow programmingDashboardBackdropGlowPrimary' aria-hidden='true' />
+        <div
+          className='programmingDashboardBackdropGlow programmingDashboardBackdropGlowSecondary'
+          aria-hidden='true'
+        />
+
+        <section className='square programmingDashboardShell'>
+          <div className='generalBlock programmingDashboardCard'>
+            <h1>ESTACION DE PROGRAMACION</h1>
+            <div className='statusUser'>
+              <h2>serial port: {port || 'sin seleccionar'}</h2>
+              <h2>status: {port ? 'listo para escanear' : 'selecciona un serial port'}</h2>
+              <h2>fecha/hora: pendiente</h2>
+            </div>
+            <div>
+              <h2>Serial Port</h2>
+              <select aria-label='SerialPort' value={port} onChange={(event) => setPort(event.target.value)}>
+                <option value=''>Selecciona</option>
+                <option value='port1'>COM 3</option>
+                <option value='port2'>COM 5</option>
+              </select>
+            </div>
+            <div className='buttonBox'>
+              <button className='buttonSelector' onClick={openManualModal} disabled={!port}>
+                Ingreso Manual
+              </button>
+              <button className='buttonSelector' onClick={() => setMode('Scan')} disabled={!port}>
+                Escaner Codigo
+              </button>
+              <button className='buttonSelector' onClick={openDoubleScanModal} disabled={!port}>
+                Doble Codigo
+              </button>
+            </div>
+            <button className='buttonSelector' type='button' onClick={() => navigate('/', { replace: true })}>
+              Volver
             </button>
-            <button className='buttonSelector' onClick={() => setMode('Scan')} disabled={!port}>
-              Escaner Codigo
-            </button>
-            <button className='buttonSelector' onClick={openDoubleScanModal} disabled={!port}>
-              Doble Codigo
-            </button>
           </div>
-          <button className='buttonSelector' type='button' onClick={() => navigate('/', { replace: true })}>
-            Volver
-          </button>
-        </div>
-      </section>
+        </section>
+      </main>
 
       {mode === 'Manual' && (
         <section className='modalOverlay'>
