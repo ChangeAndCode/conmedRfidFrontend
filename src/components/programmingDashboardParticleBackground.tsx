@@ -19,6 +19,8 @@ const PALETTE: readonly Rgb[] = [
   [122, 255, 201],
 ];
 
+const PARTICLE_DENSITY_MULTIPLIER = 1.25;
+
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const mixColor = (from: Rgb, to: Rgb, ratio: number): Rgb => {
@@ -64,10 +66,11 @@ function ProgrammingDashboardParticleBackground() {
     const createParticles = () => {
       const area = width * height;
       const estimatedCount = reducedMotion ? area / 32000 : area / 21000;
-      const particleCount =
+      const baseParticleCount =
         width < 768
           ? clamp(Math.round(estimatedCount), reducedMotion ? 18 : 24, reducedMotion ? 34 : 52)
           : clamp(Math.round(estimatedCount), reducedMotion ? 30 : 42, reducedMotion ? 56 : 82);
+      const particleCount = Math.round(baseParticleCount * PARTICLE_DENSITY_MULTIPLIER);
 
       particles = Array.from({ length: particleCount }, () => {
         const originX = Math.random() * width;

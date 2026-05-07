@@ -43,6 +43,7 @@ h1 {
 }
 h2 {
   @media (max-width: 1024px) {
+    font-size: 36px;
   }
 }
 p {

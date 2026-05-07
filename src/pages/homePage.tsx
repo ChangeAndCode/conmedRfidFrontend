@@ -67,7 +67,7 @@ function HomePage() {
                 <button className='buttonHomeSelector' onClick={() => navigate('/programmingDashboard')}>
                   <h2>{'Programaci\u00f3n'}</h2>
                 </button>
-                <button className='buttonHomeSelector' onClick={() => navigate('/verificationDashboard')}>
+                <button className='buttonHomeSelector buttonHomeSelectorVerification' onClick={() => navigate('/verificationDashboard')}>
                   <h2>{'Verificaci\u00f3n'}</h2>
                 </button>
               </div>
