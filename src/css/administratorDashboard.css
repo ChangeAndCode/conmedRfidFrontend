@@ -1,4 +1,6 @@
 .square.adminDashboard {
+    position: relative;
+    z-index: 2;
     box-sizing: border-box;
     width: min(1440px, calc(100vw - 64px));
     max-width: min(1440px, calc(100vw - 64px));
@@ -7,6 +9,11 @@
     padding: 36px 42px;
     align-items: stretch;
     gap: 28px;
+    color: #10243e;
+    background-color: rgba(244, 247, 251, 0.76);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
+    backdrop-filter: blur(18px);
 }
 
 .adminHeader {

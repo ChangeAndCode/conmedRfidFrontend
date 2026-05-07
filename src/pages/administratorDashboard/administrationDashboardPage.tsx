@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import AppSceneLayout from '../../components/appSceneLayout';
 import ConfirmActionModal from '../../components/confirmActionModal';
 import PartConfigFormModal from '../../components/partConfigFormModal';
 import '../../css/administratorDashboard.css';
@@ -189,8 +190,9 @@ function AdministrationDashboardPage() {
 
   return (
     <>
-      <section className='square adminDashboard'>
-        <div className='adminHeader'>
+      <AppSceneLayout>
+        <section className='square adminDashboard'>
+          <div className='adminHeader'>
           <div className='adminHeaderCopy'>
             <h1>Administrador</h1>
             <p>Panel para administrar configuraciones de numeros de parte.</p>
@@ -210,136 +212,137 @@ function AdministrationDashboardPage() {
               {'Cerrar Sesi\u00f3n'}
             </button>
           </div>
-        </div>
-
-        <div className='adminToolbar'>
-          <div>
-            <h2>Numeros de parte</h2>
-            <p>Mostrando datos reales del backend.</p>
           </div>
 
-          <div className='adminToolbarActions'>
-            <button
-              className='buttonSelector'
-              type='button'
-              onClick={() => {
-                setMessage(null);
-                setIsCreateModalOpen(true);
-              }}
-            >
-              Crear nuevo
-            </button>
-            <button className='buttonSelector' type='button' onClick={() => void loadPartConfigs()}>
-              Recargar
-            </button>
-          </div>
-        </div>
+          <div className='adminToolbar'>
+            <div>
+              <h2>Numeros de parte</h2>
+              <p>Mostrando datos reales del backend.</p>
+            </div>
 
-        <div className='adminTableCard'>
-          <div className='adminTableHeader'>
-            <h3>Listado de configuraciones</h3>
-            <p className='adminTableMeta'>
-              {isLoading ? 'Cargando...' : `${partConfigs.length} registros encontrados`}
-            </p>
+            <div className='adminToolbarActions'>
+              <button
+                className='buttonSelector'
+                type='button'
+                onClick={() => {
+                  setMessage(null);
+                  setIsCreateModalOpen(true);
+                }}
+              >
+                Crear nuevo
+              </button>
+              <button className='buttonSelector' type='button' onClick={() => void loadPartConfigs()}>
+                Recargar
+              </button>
+            </div>
           </div>
 
-          {message && <div className={`adminMessage ${message.type}`}>{message.text}</div>}
+          <div className='adminTableCard'>
+            <div className='adminTableHeader'>
+              <h3>Listado de configuraciones</h3>
+              <p className='adminTableMeta'>
+                {isLoading ? 'Cargando...' : `${partConfigs.length} registros encontrados`}
+              </p>
+            </div>
 
-          <div className='adminTableWrapper'>
-            <table className='adminTable'>
-              <thead>
-                <tr>
-                  <th>Numero de parte</th>
-                  <th>Modo</th>
-                  <th>Fecha de creacion</th>
-                  <th>Quien lo creo</th>
-                  <th>Estatus</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoading ? (
+            {message && <div className={`adminMessage ${message.type}`}>{message.text}</div>}
+
+            <div className='adminTableWrapper'>
+              <table className='adminTable'>
+                <thead>
                   <tr>
-                    <td colSpan={6} className='adminTableEmpty'>
-                      Cargando numeros de parte...
-                    </td>
+                    <th>Numero de parte</th>
+                    <th>Modo</th>
+                    <th>Fecha de creacion</th>
+                    <th>Quien lo creo</th>
+                    <th>Estatus</th>
+                    <th>Acciones</th>
                   </tr>
-                ) : partConfigs.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className='adminTableEmpty'>
-                      No hay configuraciones registradas por mostrar.
-                    </td>
-                  </tr>
-                ) : (
-                  partConfigs.map((config) => (
-                    <tr key={config._id}>
-                      <td>{config.partNumber}</td>
-                      <td>{formatReadingMode(config.readingMode)}</td>
-                      <td>{formatDate(config.createdAt)}</td>
-                      <td>{config.createdBy?.trim() ? config.createdBy : 'N/D'}</td>
-                      <td>
-                        <span className={`adminBadge ${config.isActive ? 'active' : 'inactive'}`}>
-                          {config.isActive ? 'Activo' : 'Inactivo'}
-                        </span>
-                      </td>
-                      <td>
-                        <div className='adminActionRow'>
-                          <button
-                            className='adminActionButton'
-                            type='button'
-                            onClick={() => {
-                              setMessage(null);
-                              setEditingPartConfig(config);
-                            }}
-                          >
-                            Editar
-                          </button>
-                          <button
-                            className='adminActionButton'
-                            type='button'
-                            onClick={() => {
-                              setMessage(null);
-                              setCopyingPartConfig(config);
-                            }}
-                          >
-                            Copiar
-                          </button>
-                          <button
-                            className='adminActionButton'
-                            type='button'
-                            onClick={() => {
-                              setMessage(null);
-                              setPendingAction({
-                                type: config.isActive ? 'deactivate' : 'activate',
-                                config,
-                              });
-                            }}
-                          >
-                            {config.isActive ? 'Desactivar' : 'Activar'}
-                          </button>
-                          <button
-                            className='adminActionButton delete'
-                            type='button'
-                            onClick={() => {
-                              setMessage(null);
-                              setPendingAction({
-                                type: 'deletePermanent',
-                                config,
-                              });
-                            }}
-                          >
-                            Eliminar
-                          </button>
-                        </div>
+                </thead>
+                <tbody>
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={6} className='adminTableEmpty'>
+                        Cargando numeros de parte...
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : partConfigs.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className='adminTableEmpty'>
+                        No hay configuraciones registradas por mostrar.
+                      </td>
+                    </tr>
+                  ) : (
+                    partConfigs.map((config) => (
+                      <tr key={config._id}>
+                        <td>{config.partNumber}</td>
+                        <td>{formatReadingMode(config.readingMode)}</td>
+                        <td>{formatDate(config.createdAt)}</td>
+                        <td>{config.createdBy?.trim() ? config.createdBy : 'N/D'}</td>
+                        <td>
+                          <span className={`adminBadge ${config.isActive ? 'active' : 'inactive'}`}>
+                            {config.isActive ? 'Activo' : 'Inactivo'}
+                          </span>
+                        </td>
+                        <td>
+                          <div className='adminActionRow'>
+                            <button
+                              className='adminActionButton'
+                              type='button'
+                              onClick={() => {
+                                setMessage(null);
+                                setEditingPartConfig(config);
+                              }}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              className='adminActionButton'
+                              type='button'
+                              onClick={() => {
+                                setMessage(null);
+                                setCopyingPartConfig(config);
+                              }}
+                            >
+                              Copiar
+                            </button>
+                            <button
+                              className='adminActionButton'
+                              type='button'
+                              onClick={() => {
+                                setMessage(null);
+                                setPendingAction({
+                                  type: config.isActive ? 'deactivate' : 'activate',
+                                  config,
+                                });
+                              }}
+                            >
+                              {config.isActive ? 'Desactivar' : 'Activar'}
+                            </button>
+                            <button
+                              className='adminActionButton delete'
+                              type='button'
+                              onClick={() => {
+                                setMessage(null);
+                                setPendingAction({
+                                  type: 'deletePermanent',
+                                  config,
+                                });
+                              }}
+                            >
+                              Eliminar
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </AppSceneLayout>
 
       {isCreateModalOpen && (
         <PartConfigFormModal

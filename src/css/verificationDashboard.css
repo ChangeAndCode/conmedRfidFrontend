@@ -1,0 +1,33 @@
+.square.verificationDashboardShell{
+    position: relative;
+    z-index: 2;
+    width: min(720px, calc(100vw - 48px));
+    min-height: 420px;
+    height: auto;
+    background-color: rgba(244, 247, 251, 0.76);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
+    backdrop-filter: blur(18px);
+}
+
+.verificationDashboardCard{
+    width: 100%;
+    display: grid;
+    gap: 18px;
+    text-align: center;
+    color: #10243e;
+}
+
+.verificationDashboardCard p{
+    font-size: 16px;
+    line-height: 1.5;
+    color: rgba(16, 36, 62, 0.82);
+}
+
+@media (max-width: 768px){
+    .square.verificationDashboardShell{
+        width: min(100vw, calc(100vw - 28px));
+        min-height: 0;
+        padding: 32px 24px;
+    }
+}

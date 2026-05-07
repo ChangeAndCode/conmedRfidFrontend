@@ -2,7 +2,7 @@ import '../../css/programmingDashboard.css';
 import '../../index.css';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import ProgrammingDashboardParticleBackground from '../../components/programmingDashboardParticleBackground';
+import AppSceneLayout from '../../components/appSceneLayout';
 import { createDoubleScanRead, resolveFirstDoubleScan } from '../../services/doubleScanService';
 import type {
   DoubleScanReadResponse,
@@ -419,14 +419,7 @@ function ProgrammingDashboardPage() {
 
   return (
     <>
-      <main className='programmingDashboardScene'>
-        <ProgrammingDashboardParticleBackground />
-        <div className='programmingDashboardBackdropGlow programmingDashboardBackdropGlowPrimary' aria-hidden='true' />
-        <div
-          className='programmingDashboardBackdropGlow programmingDashboardBackdropGlowSecondary'
-          aria-hidden='true'
-        />
-
+      <AppSceneLayout>
         <section className='square programmingDashboardShell'>
           <div className='generalBlock programmingDashboardCard'>
             <h1>ESTACION DE PROGRAMACION</h1>
@@ -459,7 +452,7 @@ function ProgrammingDashboardPage() {
             </button>
           </div>
         </section>
-      </main>
+      </AppSceneLayout>
 
       {mode === 'Manual' && (
         <section className='modalOverlay'>

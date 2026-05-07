@@ -250,7 +250,7 @@ function ProgrammingDashboardParticleBackground() {
     };
   }, []);
 
-  return <canvas ref={canvasRef} className='programmingDashboardParticlesCanvas' aria-hidden='true' />;
+  return <canvas ref={canvasRef} className='appSceneParticlesCanvas' aria-hidden='true' />;
 }
 
 export default ProgrammingDashboardParticleBackground;

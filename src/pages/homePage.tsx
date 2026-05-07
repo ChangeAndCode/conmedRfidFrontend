@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import AppSceneLayout from '../components/appSceneLayout';
 import LoginModal from '../components/loginModal';
-import ProgrammingDashboardParticleBackground from '../components/programmingDashboardParticleBackground';
 import RegisterModal from '../components/registerModal';
 import { useAuth } from '../context/AuthContext';
-import LogoConmed from '../assets/conmedImages/conmedLogo.png';
 import '../css/homePage.css';
 import type { AuthSession } from '../types/Auth';
 
@@ -47,12 +46,7 @@ function HomePage() {
 
   return (
     <>
-      <main className='homePageScene'>
-        <ProgrammingDashboardParticleBackground />
-        <div className='homePageBackdropGlow homePageBackdropGlowPrimary' aria-hidden='true' />
-        <div className='homePageBackdropGlow homePageBackdropGlowSecondary' aria-hidden='true' />
-        <img className='homePageBrandLogo' src={LogoConmed} alt='conmedLogo' />
-
+      <AppSceneLayout>
         <section className='square homePageShell'>
           <div className='homePageCard'>
             <div className='titleBlock'>
@@ -101,7 +95,7 @@ function HomePage() {
             )}
           </div>
         </section>
-      </main>
+      </AppSceneLayout>
 
       {activeModal === 'login' && (
         <LoginModal
