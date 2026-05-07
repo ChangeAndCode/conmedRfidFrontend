@@ -81,7 +81,7 @@ function RegisterModal({ onClose, onSuccess }: RegisterModalProps) {
               <input
                 type='text'
                 value={formValues.username}
-                placeholder='gibran'
+                placeholder='usuario 123'
                 autoComplete='username'
                 onChange={(event) =>
                   setFormValues((currentValues) => ({
@@ -99,7 +99,7 @@ function RegisterModal({ onClose, onSuccess }: RegisterModalProps) {
               <input
                 type='email'
                 value={formValues.email}
-                placeholder='gibran@empresa.com'
+                placeholder='contacto@empresa.com'
                 autoComplete='email'
                 onChange={(event) =>
                   setFormValues((currentValues) => ({

@@ -6,7 +6,6 @@ import type { AuthSession, LoginCredentials } from '../types/Auth';
 type LoginModalProps = {
   onClose: () => void;
   onSuccess: (session: AuthSession) => void;
-  onOpenRegister: () => void;
   initialEmail?: string;
   feedbackMessage?: string | null;
 };
@@ -14,7 +13,6 @@ type LoginModalProps = {
 function LoginModal({
   onClose,
   onSuccess,
-  onOpenRegister,
   initialEmail = '',
   feedbackMessage = null,
 }: LoginModalProps) {
@@ -77,7 +75,7 @@ function LoginModal({
               <input
                 type='email'
                 value={credentials.email}
-                placeholder='gibran@empresa.com'
+                placeholder='contacto@empresa.com'
                 autoComplete='email'
                 onChange={(event) =>
                   setCredentials((currentCredentials) => ({
@@ -120,13 +118,6 @@ function LoginModal({
               </button>
               <button className='buttonSelector' type='button' onClick={onClose} disabled={isSubmitting}>
                 Cerrar
-              </button>
-            </div>
-
-            <div>
-              <h2>Registro nuevo usuario</h2>
-              <button className='buttonSelector' type='button' onClick={onOpenRegister} disabled={isSubmitting}>
-                Ir a registro
               </button>
             </div>
           </form>

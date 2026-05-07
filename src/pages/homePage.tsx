@@ -4,7 +4,7 @@ import LoginModal from '../components/loginModal';
 import ProgrammingDashboardParticleBackground from '../components/programmingDashboardParticleBackground';
 import RegisterModal from '../components/registerModal';
 import { useAuth } from '../context/AuthContext';
-import LogoConmed from '../assets/conmedImages/conmed_logo_2.png';
+import LogoConmed from '../assets/conmedImages/conmedLogo.png';
 import '../css/homePage.css';
 import type { AuthSession } from '../types/Auth';
 
@@ -51,13 +51,13 @@ function HomePage() {
         <ProgrammingDashboardParticleBackground />
         <div className='homePageBackdropGlow homePageBackdropGlowPrimary' aria-hidden='true' />
         <div className='homePageBackdropGlow homePageBackdropGlowSecondary' aria-hidden='true' />
+        <img className='homePageBrandLogo' src={LogoConmed} alt='conmedLogo' />
 
         <section className='square homePageShell'>
           <div className='homePageCard'>
             <div className='titleBlock'>
               <div>
                 <h1>{'Estaci\u00f3n de RFID'}</h1>
-                <img src={LogoConmed} alt='conmedLogo' />
               </div>
               <p>{'Estaci\u00f3n dise\u00f1ada para procesos dedicados de ConMed'}</p>
             </div>
@@ -106,7 +106,6 @@ function HomePage() {
       {activeModal === 'login' && (
         <LoginModal
           onClose={closeLoginModal}
-          onOpenRegister={() => setActiveModal('register')}
           onSuccess={handleLoginSuccess}
           initialEmail={loginPrefillEmail}
           feedbackMessage={loginFeedbackMessage}
