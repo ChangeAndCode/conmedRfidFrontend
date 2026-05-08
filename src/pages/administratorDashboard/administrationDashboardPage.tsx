@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import AppSceneLayout from '../../components/appSceneLayout';
 import ConfirmActionModal from '../../components/confirmActionModal';
 import PartConfigFormModal from '../../components/partConfigFormModal';
+import RegisterModal from '../../components/registerModal';
 import '../../css/administratorDashboard.css';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -62,6 +63,7 @@ function AdministrationDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [message, setMessage] = useState<DashboardMessage | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [editingPartConfig, setEditingPartConfig] = useState<PartConfig | null>(null);
   const [copyingPartConfig, setCopyingPartConfig] = useState<PartConfig | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAdminAction | null>(null);
@@ -193,25 +195,37 @@ function AdministrationDashboardPage() {
       <AppSceneLayout>
         <section className='square adminDashboard'>
           <div className='adminHeader'>
-          <div className='adminHeaderCopy'>
-            <h1>Administrador</h1>
-            <p>Panel para administrar configuraciones de numeros de parte.</p>
-          </div>
+            <div className='adminHeaderCopy'>
+              <h1>Administrador</h1>
+              <p>Panel para administrar configuraciones de numeros de parte.</p>
+            </div>
 
-          <div className='adminSessionBox'>
-            <h2>Usuario activo: {user?.username}</h2>
-            <p>Correo: {user?.email}</p>
-            <button
-              className='buttonSelector'
-              type='button'
-              onClick={() => {
-                logout();
-                navigate('/', { replace: true });
-              }}
-            >
-              {'Cerrar Sesi\u00f3n'}
-            </button>
-          </div>
+            <div className='adminSessionBox'>
+              <h2>Usuario activo: {user?.username}</h2>
+              <p>Correo: {user?.email}</p>
+              <div className='adminSessionActions'>
+                <button
+                  className='buttonSelector'
+                  type='button'
+                  onClick={() => {
+                    setMessage(null);
+                    setIsRegisterModalOpen(true);
+                  }}
+                >
+                  Registrar usuario
+                </button>
+                <button
+                  className='buttonSelector'
+                  type='button'
+                  onClick={() => {
+                    logout();
+                    navigate('/', { replace: true });
+                  }}
+                >
+                  {'Cerrar Sesi\u00f3n'}
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className='adminToolbar'>
@@ -351,6 +365,19 @@ function AdministrationDashboardPage() {
           submittingLabel='Guardando...'
           onClose={() => setIsCreateModalOpen(false)}
           onSubmit={handleCreatePartConfig}
+        />
+      )}
+
+      {isRegisterModalOpen && (
+        <RegisterModal
+          onClose={() => setIsRegisterModalOpen(false)}
+          onSuccess={(nextUser) => {
+            setIsRegisterModalOpen(false);
+            setMessage({
+              type: 'success',
+              text: `Usuario ${nextUser.username} registrado correctamente.`,
+            });
+          }}
         />
       )}
 

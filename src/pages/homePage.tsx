@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import AppSceneLayout from '../components/appSceneLayout';
 import LoginModal from '../components/loginModal';
-import RegisterModal from '../components/registerModal';
 import { useAuth } from '../context/AuthContext';
 import '../css/homePage.css';
 import type { AuthSession } from '../types/Auth';
@@ -14,7 +13,7 @@ type RedirectState = {
 };
 
 function HomePage() {
-  const [activeModal, setActiveModal] = useState<'login' | 'register' | null>(null);
+  const [activeModal, setActiveModal] = useState<'login' | null>(null);
   const [loginPrefillEmail, setLoginPrefillEmail] = useState('');
   const [loginFeedbackMessage, setLoginFeedbackMessage] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -85,11 +84,8 @@ function HomePage() {
               </div>
             ) : (
               <div className='loginRegisterSelection'>
-                <button onClick={() => openLoginModal()} className='buttonSelector'>
+                <button onClick={() => openLoginModal()} className='buttonSelector homeTextOnlyButton'>
                   {'Iniciar Sesi\u00f3n'}
-                </button>
-                <button onClick={() => setActiveModal('register')} className='buttonSelector'>
-                  Registrar Usuario
                 </button>
               </div>
             )}
@@ -103,18 +99,6 @@ function HomePage() {
           onSuccess={handleLoginSuccess}
           initialEmail={loginPrefillEmail}
           feedbackMessage={loginFeedbackMessage}
-        />
-      )}
-
-      {activeModal === 'register' && (
-        <RegisterModal
-          onClose={() => setActiveModal(null)}
-          onSuccess={(nextUser) => {
-            openLoginModal({
-              email: nextUser.email,
-              message: 'Usuario registrado correctamente. Ahora inicia sesion.',
-            });
-          }}
         />
       )}
     </>

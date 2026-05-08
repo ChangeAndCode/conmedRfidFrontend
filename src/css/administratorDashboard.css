@@ -35,6 +35,13 @@
     justify-items: end;
 }
 
+.adminSessionActions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
 .adminToolbar {
     display: flex;
     justify-content: space-between;
@@ -295,6 +302,10 @@
 
     .adminSessionBox {
         justify-items: start;
+    }
+
+    .adminSessionActions {
+        justify-content: flex-start;
     }
 
     .adminFormGrid {

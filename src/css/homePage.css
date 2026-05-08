@@ -76,16 +76,35 @@
 }
 
 .homePageCard .buttonSelector{
-    background-color: rgba(255, 255, 255, 0.76);
-    border-color: rgba(16, 36, 62, 0.78);
-    box-shadow: 0 10px 24px rgba(10, 28, 52, 0.12);
+    border: none;
     transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
 
 .homePageCard .buttonSelector:hover{
     transform: translateY(-1px);
-    background-color: rgba(255, 255, 255, 0.92);
     box-shadow: 0 14px 28px rgba(10, 28, 52, 0.18);
+}
+
+.homeTextOnlyButton{
+    width: auto;
+    height: auto;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    appearance: none;
+    color: #10243e;
+    font-size: 24px;
+    line-height: 1.2;
+
+    cursor: pointer;
+}
+
+.homeTextOnlyButton:hover{
+    transform: none;
+    box-shadow: none;
+    text-decoration: underline;
 }
 
 .sessionStatus{
@@ -113,7 +132,7 @@
 }
 
 .buttonHomeSelector:hover{
-  color: #10243e;
+  color: #0a57d2;
   transform: translateY(-2px);
   background: linear-gradient(135deg, #f5fbff 0%, #d6ecff 100%);
   box-shadow: 0 24px 40px rgba(10, 28, 52, 0.18);
