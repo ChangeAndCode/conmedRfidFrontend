@@ -9,7 +9,6 @@ type PartConfigFormValues = {
   expectedGtin: string;
   filterLabel: string;
   expectedLotLength: string;
-  lotTrimRight: string;
   isActive: boolean;
   notes: string;
 };
@@ -40,7 +39,6 @@ const INITIAL_VALUES: PartConfigFormValues = {
   expectedGtin: '',
   filterLabel: '',
   expectedLotLength: '',
-  lotTrimRight: '',
   isActive: true,
   notes: '',
 };
@@ -54,7 +52,6 @@ const buildFormValues = (initialData?: Partial<PartConfig>): PartConfigFormValue
   filterLabel: initialData?.filterLabel ?? '',
   expectedLotLength:
     initialData?.expectedLotLength === undefined ? '' : String(initialData.expectedLotLength),
-  lotTrimRight: initialData?.lotTrimRight === undefined ? '' : String(initialData.lotTrimRight),
   isActive: initialData?.isActive ?? true,
   notes: initialData?.notes ?? '',
 });
@@ -87,7 +84,6 @@ function PartConfigFormModal({
     const trimmedFilterLabel = values.filterLabel.trim();
     const trimmedNotes = values.notes.trim();
     const trimmedExpectedLotLength = values.expectedLotLength.trim();
-    const trimmedLotTrimRight = values.lotTrimRight.trim();
 
     if (!trimmedPartNumber) {
       setErrorMessage('El numero de parte es obligatorio.');
@@ -100,7 +96,6 @@ function PartConfigFormModal({
     }
 
     let parsedExpectedLotLength: number | undefined;
-    let parsedLotTrimRight: number | undefined;
 
     if (trimmedExpectedLotLength) {
       parsedExpectedLotLength = Number.parseInt(trimmedExpectedLotLength, 10);
@@ -109,20 +104,6 @@ function PartConfigFormModal({
         setErrorMessage('La longitud esperada del lote debe ser un numero mayor a cero.');
         return;
       }
-    }
-
-    if (trimmedLotTrimRight) {
-      parsedLotTrimRight = Number.parseInt(trimmedLotTrimRight, 10);
-
-      if (Number.isNaN(parsedLotTrimRight) || parsedLotTrimRight < 0) {
-        setErrorMessage('Lot trim right debe ser un numero igual o mayor a cero.');
-        return;
-      }
-    }
-
-    if (trimmedLotTrimRight && !trimmedExpectedLotLength) {
-      setErrorMessage('Lot trim right requiere una longitud esperada del lote.');
-      return;
     }
 
     if (rawExpectedGtin && !isExpectedGtinValid(rawExpectedGtin)) {
@@ -157,7 +138,6 @@ function PartConfigFormModal({
         expectedGtin: rawExpectedGtin || undefined,
         filterLabel: trimmedFilterLabel || undefined,
         expectedLotLength: parsedExpectedLotLength,
-        lotTrimRight: parsedLotTrimRight,
         isActive: values.isActive,
         notes: trimmedNotes || undefined,
       });
@@ -303,23 +283,6 @@ function PartConfigFormModal({
                   }))
                 }
                 placeholder='9'
-                disabled={isSubmitting || isCopyMode}
-              />
-            </label>
-
-            <label className='adminField'>
-              <span>Lot trim right</span>
-              <input
-                type='number'
-                min='0'
-                value={values.lotTrimRight}
-                onChange={(event) =>
-                  setValues((currentValues) => ({
-                    ...currentValues,
-                    lotTrimRight: event.target.value,
-                  }))
-                }
-                placeholder='4'
                 disabled={isSubmitting || isCopyMode}
               />
             </label>
