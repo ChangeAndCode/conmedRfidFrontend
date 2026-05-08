@@ -24,6 +24,14 @@ type PartConfigFormModalProps = {
   copySourcePartNumber?: string;
 };
 
+const EXPECTED_GTIN_LENGTH = 14;
+
+const sanitizeExpectedGtinInput = (value: string) =>
+  value.replace(/\D/g, '').slice(0, EXPECTED_GTIN_LENGTH);
+
+const isExpectedGtinValid = (value: string) =>
+  new RegExp(`^\\d{${EXPECTED_GTIN_LENGTH}}$`).test(value);
+
 const INITIAL_VALUES: PartConfigFormValues = {
   partNumber: '',
   description: '',
@@ -75,7 +83,7 @@ function PartConfigFormModal({
     const trimmedPartNumber = values.partNumber.trim();
     const trimmedDescription = values.description.trim();
     const trimmedRfidProgram = values.rfidProgram.trim();
-    const trimmedExpectedGtin = values.expectedGtin.trim();
+    const rawExpectedGtin = values.expectedGtin.trim();
     const trimmedFilterLabel = values.filterLabel.trim();
     const trimmedNotes = values.notes.trim();
     const trimmedExpectedLotLength = values.expectedLotLength.trim();
@@ -117,8 +125,19 @@ function PartConfigFormModal({
       return;
     }
 
+    if (rawExpectedGtin && !isExpectedGtinValid(rawExpectedGtin)) {
+      setErrorMessage(
+        `Expected GTIN debe contener exactamente ${EXPECTED_GTIN_LENGTH} digitos numericos.`,
+      );
+      return;
+    }
+
     if (isDoubleScan) {
-      if (!trimmedRfidProgram || !trimmedExpectedGtin || parsedExpectedLotLength === undefined) {
+      if (
+        !trimmedRfidProgram ||
+        !rawExpectedGtin ||
+        parsedExpectedLotLength === undefined
+      ) {
         setErrorMessage(
           'Para doble lectura son obligatorios RFID Program, Expected GTIN y Expected Lot Length.',
         );
@@ -135,7 +154,7 @@ function PartConfigFormModal({
         description: trimmedDescription || undefined,
         readingMode: values.readingMode,
         rfidProgram: trimmedRfidProgram || undefined,
-        expectedGtin: trimmedExpectedGtin || undefined,
+        expectedGtin: rawExpectedGtin || undefined,
         filterLabel: trimmedFilterLabel || undefined,
         expectedLotLength: parsedExpectedLotLength,
         lotTrimRight: parsedLotTrimRight,
@@ -159,7 +178,7 @@ function PartConfigFormModal({
             <h2>{title}</h2>
             <p>
               {isCopyMode
-                ? 'Se reutilizaran los datos del registro original. Solo cambia el numero de parte.'
+                ? 'Se reutilizaran los datos del registro original. Cambia el numero de parte y, si hace falta, corrige el Expected GTIN.'
                 : 'Captura los datos del numero de parte que quieres administrar.'}
             </p>
           </div>
@@ -241,15 +260,17 @@ function PartConfigFormModal({
               <span>Expected GTIN</span>
               <input
                 type='text'
+                inputMode='numeric'
+                maxLength={EXPECTED_GTIN_LENGTH}
                 value={values.expectedGtin}
                 onChange={(event) =>
                   setValues((currentValues) => ({
                     ...currentValues,
-                    expectedGtin: event.target.value,
+                    expectedGtin: sanitizeExpectedGtinInput(event.target.value),
                   }))
                 }
                 placeholder='10884524001425'
-                disabled={isSubmitting || isCopyMode}
+                disabled={isSubmitting}
               />
             </label>
 
@@ -337,10 +358,10 @@ function PartConfigFormModal({
 
           <p className='adminFieldHint'>
             {isCopyMode
-              ? 'Los demas campos quedan bloqueados para clonar la configuracion actual y cambiar solo el numero de parte.'
+              ? 'Los demas campos quedan bloqueados para clonar la configuracion actual y cambiar solo el numero de parte o el Expected GTIN.'
               : isDoubleScan
               ? 'En doble lectura son obligatorios RFID Program, Expected GTIN y Expected Lot Length.'
-              : 'Para manual o single scan, los campos tecnicos son opcionales.'}
+              : `Para manual o single scan, los campos tecnicos son opcionales. Si capturas Expected GTIN, debe tener ${EXPECTED_GTIN_LENGTH} digitos.`}
           </p>
 
           {errorMessage && <div className='adminMessage error'>{errorMessage}</div>}
