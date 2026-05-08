@@ -1073,6 +1073,9 @@ function AdministrationDashboardPage() {
           title='Crear numero de parte'
           submitLabel='Guardar configuracion'
           submittingLabel='Guardando...'
+          gtins={gtins}
+          rfidPrograms={rfidPrograms}
+          isCatalogLoading={isLoadingGtins || isLoadingRfidPrograms}
           onClose={() => setIsCreateModalOpen(false)}
           onSubmit={handleCreatePartConfig}
         />
@@ -1116,6 +1119,9 @@ function AdministrationDashboardPage() {
           title={`Editar ${editingPartConfig.partNumber}`}
           submitLabel='Guardar cambios'
           submittingLabel='Actualizando...'
+          gtins={gtins}
+          rfidPrograms={rfidPrograms}
+          isCatalogLoading={isLoadingGtins || isLoadingRfidPrograms}
           initialData={editingPartConfig}
           onClose={() => setEditingPartConfig(null)}
           onSubmit={handleUpdatePartConfig}
@@ -1149,6 +1155,9 @@ function AdministrationDashboardPage() {
           title={`Copiar ${copyingPartConfig.partNumber}`}
           submitLabel='Guardar copia'
           submittingLabel='Guardando copia...'
+          gtins={gtins}
+          rfidPrograms={rfidPrograms}
+          isCatalogLoading={isLoadingGtins || isLoadingRfidPrograms}
           initialData={copyingPartConfig}
           copySourcePartNumber={copyingPartConfig.partNumber}
           onClose={() => setCopyingPartConfig(null)}

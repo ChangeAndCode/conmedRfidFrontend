@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react';
+import type { Gtin } from '../types/Gtin';
 import type { PartConfig, PartConfigMutationPayload, ReadingMode } from '../types/PartConfig';
+import type { RfidProgram } from '../types/RfidProgram';
 
 type PartConfigFormValues = {
   partNumber: string;
@@ -19,17 +21,12 @@ type PartConfigFormModalProps = {
   submittingLabel: string;
   onClose: () => void;
   onSubmit: (payload: PartConfigMutationPayload) => Promise<void>;
+  gtins: Gtin[];
+  rfidPrograms: RfidProgram[];
+  isCatalogLoading?: boolean;
   initialData?: Partial<PartConfig>;
   copySourcePartNumber?: string;
 };
-
-const EXPECTED_GTIN_LENGTH = 14;
-
-const sanitizeExpectedGtinInput = (value: string) =>
-  value.replace(/\D/g, '').slice(0, EXPECTED_GTIN_LENGTH);
-
-const isExpectedGtinValid = (value: string) =>
-  new RegExp(`^\\d{${EXPECTED_GTIN_LENGTH}}$`).test(value);
 
 const INITIAL_VALUES: PartConfigFormValues = {
   partNumber: '',
@@ -62,6 +59,9 @@ function PartConfigFormModal({
   submittingLabel,
   onClose,
   onSubmit,
+  gtins,
+  rfidPrograms,
+  isCatalogLoading = false,
   initialData,
   copySourcePartNumber,
 }: PartConfigFormModalProps) {
@@ -73,6 +73,15 @@ function PartConfigFormModal({
 
   const isDoubleScan = values.readingMode === 'double_scan';
   const isCopyMode = Boolean(copySourcePartNumber);
+  const activeGtins = gtins.filter((gtin) => gtin.isActive);
+  const activeRfidPrograms = rfidPrograms.filter((rfidProgram) => rfidProgram.isActive);
+  const hasActiveExpectedGtin = activeGtins.some((gtin) => gtin.value === values.expectedGtin);
+  const hasActiveRfidProgram = activeRfidPrograms.some(
+    (rfidProgram) => rfidProgram.value === values.rfidProgram,
+  );
+  const showUnavailableExpectedGtin =
+    values.expectedGtin.trim().length > 0 && !hasActiveExpectedGtin;
+  const showUnavailableRfidProgram = values.rfidProgram.trim().length > 0 && !hasActiveRfidProgram;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -106,10 +115,13 @@ function PartConfigFormModal({
       }
     }
 
-    if (rawExpectedGtin && !isExpectedGtinValid(rawExpectedGtin)) {
-      setErrorMessage(
-        `Expected GTIN debe contener exactamente ${EXPECTED_GTIN_LENGTH} digitos numericos.`,
-      );
+    if (rawExpectedGtin && !activeGtins.some((gtin) => gtin.value === rawExpectedGtin)) {
+      setErrorMessage('El GTIN seleccionado no existe o no esta activo.');
+      return;
+    }
+
+    if (trimmedRfidProgram && !activeRfidPrograms.some((rfidProgram) => rfidProgram.value === trimmedRfidProgram)) {
+      setErrorMessage('El RFID program seleccionado no existe o no esta activo.');
       return;
     }
 
@@ -124,6 +136,11 @@ function PartConfigFormModal({
         );
         return;
       }
+    }
+
+    if (isCatalogLoading) {
+      setErrorMessage('Los catalogos aun se estan cargando. Intenta de nuevo en un momento.');
+      return;
     }
 
     setIsSubmitting(true);
@@ -158,7 +175,7 @@ function PartConfigFormModal({
             <h2>{title}</h2>
             <p>
               {isCopyMode
-                ? 'Se reutilizaran los datos del registro original. Cambia el numero de parte y, si hace falta, corrige el Expected GTIN.'
+                ? 'Se reutilizaran los datos del registro original. Cambia el numero de parte y, si hace falta, selecciona otro GTIN o RFID Program.'
                 : 'Captura los datos del numero de parte que quieres administrar.'}
             </p>
           </div>
@@ -222,8 +239,7 @@ function PartConfigFormModal({
 
             <label className='adminField'>
               <span>RFID Program</span>
-              <input
-                type='text'
+              <select
                 value={values.rfidProgram}
                 onChange={(event) =>
                   setValues((currentValues) => ({
@@ -231,27 +247,46 @@ function PartConfigFormModal({
                     rfidProgram: event.target.value,
                   }))
                 }
-                placeholder='VL-25'
-                disabled={isSubmitting || isCopyMode}
-              />
+                disabled={isSubmitting || isCatalogLoading}
+              >
+                <option value=''>Selecciona un RFID Program</option>
+                {showUnavailableRfidProgram && (
+                  <option value={values.rfidProgram}>
+                    {`${values.rfidProgram} (inactivo o no disponible)`}
+                  </option>
+                )}
+                {activeRfidPrograms.map((rfidProgram) => (
+                  <option key={rfidProgram._id} value={rfidProgram.value}>
+                    {rfidProgram.value}
+                  </option>
+                ))}
+              </select>
             </label>
 
             <label className='adminField'>
               <span>Expected GTIN</span>
-              <input
-                type='text'
-                inputMode='numeric'
-                maxLength={EXPECTED_GTIN_LENGTH}
+              <select
                 value={values.expectedGtin}
                 onChange={(event) =>
                   setValues((currentValues) => ({
                     ...currentValues,
-                    expectedGtin: sanitizeExpectedGtinInput(event.target.value),
+                    expectedGtin: event.target.value,
                   }))
                 }
-                placeholder='10884524001425'
-                disabled={isSubmitting}
-              />
+                disabled={isSubmitting || isCatalogLoading}
+              >
+                <option value=''>Selecciona un GTIN</option>
+                {showUnavailableExpectedGtin && (
+                  <option value={values.expectedGtin}>
+                    {`${values.expectedGtin} (inactivo o no disponible)`}
+                  </option>
+                )}
+                {activeGtins.map((gtin) => (
+                  <option key={gtin._id} value={gtin.value}>
+                    {gtin.value}
+                  </option>
+                ))}
+              </select>
             </label>
 
             <label className='adminField'>
@@ -321,11 +356,17 @@ function PartConfigFormModal({
 
           <p className='adminFieldHint'>
             {isCopyMode
-              ? 'Los demas campos quedan bloqueados para clonar la configuracion actual y cambiar solo el numero de parte o el Expected GTIN.'
+              ? 'Los demas campos quedan bloqueados para clonar la configuracion actual y cambiar solo el numero de parte, el GTIN o el RFID Program.'
               : isDoubleScan
-              ? 'En doble lectura son obligatorios RFID Program, Expected GTIN y Expected Lot Length.'
-              : `Para manual o single scan, los campos tecnicos son opcionales. Si capturas Expected GTIN, debe tener ${EXPECTED_GTIN_LENGTH} digitos.`}
+              ? 'En doble lectura son obligatorios RFID Program, Expected GTIN y Expected Lot Length. Ambos deben existir activos en catalogo.'
+              : 'Para manual o single scan, los campos tecnicos son opcionales. Si capturas GTIN o RFID Program, deben existir activos en catalogo.'}
           </p>
+
+          {(showUnavailableExpectedGtin || showUnavailableRfidProgram) && (
+            <div className='adminMessage info'>
+              El registro actual tiene valores de catalogo inactivos o no disponibles. Selecciona opciones activas antes de guardar.
+            </div>
+          )}
 
           {errorMessage && <div className='adminMessage error'>{errorMessage}</div>}
 
