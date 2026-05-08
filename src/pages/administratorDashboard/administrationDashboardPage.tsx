@@ -3,10 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import AdminLogo from '../../assets/conmedImages/conmedLogo.png';
 import AppSceneLayout from '../../components/appSceneLayout';
 import ConfirmActionModal from '../../components/confirmActionModal';
+import GtinFormModal from '../../components/gtinFormModal';
 import PartConfigFormModal from '../../components/partConfigFormModal';
 import RegisterModal from '../../components/registerModal';
+import RfidProgramFormModal from '../../components/rfidProgramFormModal';
 import '../../css/administratorDashboard.css';
 import { useAuth } from '../../context/AuthContext';
+import {
+  activateGtin,
+  createGtin,
+  deactivateGtin,
+  listGtins,
+  updateGtin,
+} from '../../services/gtinService';
 import {
   activatePartConfig,
   createPartConfig,
@@ -15,7 +24,16 @@ import {
   permanentlyDeletePartConfig,
   updatePartConfig,
 } from '../../services/partConfigService';
+import {
+  activateRfidProgram,
+  createRfidProgram,
+  deactivateRfidProgram,
+  listRfidPrograms,
+  updateRfidProgram,
+} from '../../services/rfidProgramService';
+import type { Gtin, GtinMutationPayload } from '../../types/Gtin';
 import type { PartConfig, PartConfigMutationPayload } from '../../types/PartConfig';
+import type { RfidProgram, RfidProgramMutationPayload } from '../../types/RfidProgram';
 
 type DashboardMessage = {
   type: 'info' | 'error' | 'success';
@@ -26,6 +44,16 @@ type PendingAdminAction =
   | { type: 'activate'; config: PartConfig }
   | { type: 'deactivate'; config: PartConfig }
   | { type: 'deletePermanent'; config: PartConfig };
+
+type PendingGtinAction =
+  | { type: 'activate'; gtin: Gtin }
+  | { type: 'deactivate'; gtin: Gtin }
+  | { type: 'delete'; gtin: Gtin };
+
+type PendingRfidProgramAction =
+  | { type: 'activate'; rfidProgram: RfidProgram }
+  | { type: 'deactivate'; rfidProgram: RfidProgram }
+  | { type: 'delete'; rfidProgram: RfidProgram };
 
 type AdminSectionId =
   | 'dashboard'
@@ -110,14 +138,27 @@ function AdministrationDashboardPage() {
   const [activeSection, setActiveSection] = useState<AdminSectionId>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [partConfigs, setPartConfigs] = useState<PartConfig[]>([]);
+  const [gtins, setGtins] = useState<Gtin[]>([]);
+  const [rfidPrograms, setRfidPrograms] = useState<RfidProgram[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingGtins, setIsLoadingGtins] = useState(true);
+  const [isLoadingRfidPrograms, setIsLoadingRfidPrograms] = useState(true);
   const [message, setMessage] = useState<DashboardMessage | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isCreateGtinModalOpen, setIsCreateGtinModalOpen] = useState(false);
+  const [isCreateRfidProgramModalOpen, setIsCreateRfidProgramModalOpen] = useState(false);
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [editingPartConfig, setEditingPartConfig] = useState<PartConfig | null>(null);
+  const [editingGtin, setEditingGtin] = useState<Gtin | null>(null);
+  const [editingRfidProgram, setEditingRfidProgram] = useState<RfidProgram | null>(null);
   const [copyingPartConfig, setCopyingPartConfig] = useState<PartConfig | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAdminAction | null>(null);
+  const [pendingGtinAction, setPendingGtinAction] = useState<PendingGtinAction | null>(null);
+  const [pendingRfidProgramAction, setPendingRfidProgramAction] =
+    useState<PendingRfidProgramAction | null>(null);
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
+  const [isSubmittingGtinAction, setIsSubmittingGtinAction] = useState(false);
+  const [isSubmittingRfidProgramAction, setIsSubmittingRfidProgramAction] = useState(false);
 
   const activeSectionConfig =
     ADMIN_SECTIONS.find((section) => section.id === activeSection) ?? ADMIN_SECTIONS[0];
@@ -150,8 +191,60 @@ function AdministrationDashboardPage() {
     }
   };
 
+  const loadGtins = async (options?: { clearMessage?: boolean }) => {
+    setIsLoadingGtins(true);
+
+    if (options?.clearMessage ?? true) {
+      setMessage(null);
+    }
+
+    try {
+      const nextGtins = await listGtins();
+      setGtins(nextGtins);
+      return true;
+    } catch (error) {
+      setGtins([]);
+      setMessage({
+        type: 'error',
+        text:
+          error instanceof Error ? error.message : 'No se pudo conectar con el backend para cargar GTIN.',
+      });
+      return false;
+    } finally {
+      setIsLoadingGtins(false);
+    }
+  };
+
+  const loadRfidPrograms = async (options?: { clearMessage?: boolean }) => {
+    setIsLoadingRfidPrograms(true);
+
+    if (options?.clearMessage ?? true) {
+      setMessage(null);
+    }
+
+    try {
+      const nextRfidPrograms = await listRfidPrograms();
+      setRfidPrograms(nextRfidPrograms);
+      return true;
+    } catch (error) {
+      setRfidPrograms([]);
+      setMessage({
+        type: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'No se pudo conectar con el backend para cargar RFID Program.',
+      });
+      return false;
+    } finally {
+      setIsLoadingRfidPrograms(false);
+    }
+  };
+
   useEffect(() => {
     void loadPartConfigs();
+    void loadGtins({ clearMessage: false });
+    void loadRfidPrograms({ clearMessage: false });
   }, []);
 
   const handleLogout = () => {
@@ -168,6 +261,32 @@ function AdministrationDashboardPage() {
     const result = await createPartConfig(payload);
     setIsCreateModalOpen(false);
     const didRefreshList = await loadPartConfigs({ clearMessage: false });
+
+    if (didRefreshList) {
+      setMessage({
+        type: 'success',
+        text: result.message,
+      });
+    }
+  };
+
+  const handleCreateGtin = async (payload: GtinMutationPayload) => {
+    const result = await createGtin(payload);
+    setIsCreateGtinModalOpen(false);
+    const didRefreshList = await loadGtins({ clearMessage: false });
+
+    if (didRefreshList) {
+      setMessage({
+        type: 'success',
+        text: result.message,
+      });
+    }
+  };
+
+  const handleCreateRfidProgram = async (payload: RfidProgramMutationPayload) => {
+    const result = await createRfidProgram(payload);
+    setIsCreateRfidProgramModalOpen(false);
+    const didRefreshList = await loadRfidPrograms({ clearMessage: false });
 
     if (didRefreshList) {
       setMessage({
@@ -194,6 +313,40 @@ function AdministrationDashboardPage() {
     }
   };
 
+  const handleUpdateGtin = async (payload: GtinMutationPayload) => {
+    if (!editingGtin) {
+      throw new Error('No se encontro el GTIN que se quiere editar.');
+    }
+
+    const result = await updateGtin(editingGtin._id, payload);
+    setEditingGtin(null);
+    const didRefreshList = await loadGtins({ clearMessage: false });
+
+    if (didRefreshList) {
+      setMessage({
+        type: 'success',
+        text: result.message,
+      });
+    }
+  };
+
+  const handleUpdateRfidProgram = async (payload: RfidProgramMutationPayload) => {
+    if (!editingRfidProgram) {
+      throw new Error('No se encontro el RFID program que se quiere editar.');
+    }
+
+    const result = await updateRfidProgram(editingRfidProgram._id, payload);
+    setEditingRfidProgram(null);
+    const didRefreshList = await loadRfidPrograms({ clearMessage: false });
+
+    if (didRefreshList) {
+      setMessage({
+        type: 'success',
+        text: result.message,
+      });
+    }
+  };
+
   const handleCopyPartConfig = async (payload: PartConfigMutationPayload) => {
     if (!copyingPartConfig) {
       throw new Error('No se encontro la configuracion que se quiere copiar.');
@@ -208,6 +361,93 @@ function AdministrationDashboardPage() {
         type: 'success',
         text: result.message,
       });
+    }
+  };
+
+  const handleConfirmPendingGtinAction = async () => {
+    if (!pendingGtinAction) {
+      return;
+    }
+
+    setIsSubmittingGtinAction(true);
+
+    try {
+      let result;
+
+      switch (pendingGtinAction.type) {
+        case 'activate':
+          result = await activateGtin(pendingGtinAction.gtin._id);
+          break;
+        case 'deactivate':
+          result = await updateGtin(pendingGtinAction.gtin._id, { isActive: false });
+          break;
+        case 'delete':
+          result = await deactivateGtin(pendingGtinAction.gtin._id);
+          break;
+      }
+
+      setPendingGtinAction(null);
+      const didRefreshList = await loadGtins({ clearMessage: false });
+
+      if (didRefreshList) {
+        setMessage({
+          type: 'success',
+          text: result.message,
+        });
+      }
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'No se pudo completar la accion solicitada para el GTIN.',
+      });
+    } finally {
+      setIsSubmittingGtinAction(false);
+    }
+  };
+
+  const handleConfirmPendingRfidProgramAction = async () => {
+    if (!pendingRfidProgramAction) {
+      return;
+    }
+
+    setIsSubmittingRfidProgramAction(true);
+
+    try {
+      let result;
+
+      switch (pendingRfidProgramAction.type) {
+        case 'activate':
+          result = await activateRfidProgram(pendingRfidProgramAction.rfidProgram._id);
+          break;
+        case 'deactivate':
+          result = await updateRfidProgram(pendingRfidProgramAction.rfidProgram._id, {
+            isActive: false,
+          });
+          break;
+        case 'delete':
+          result = await deactivateRfidProgram(pendingRfidProgramAction.rfidProgram._id);
+          break;
+      }
+
+      setPendingRfidProgramAction(null);
+      const didRefreshList = await loadRfidPrograms({ clearMessage: false });
+
+      if (didRefreshList) {
+        setMessage({
+          type: 'success',
+          text: result.message,
+        });
+      }
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'No se pudo completar la accion solicitada para el RFID program.',
+      });
+    } finally {
+      setIsSubmittingRfidProgramAction(false);
     }
   };
 
@@ -449,6 +689,248 @@ function AdministrationDashboardPage() {
     </section>
   );
 
+  const renderGtinsSection = () => (
+    <section className='adminSectionStack'>
+      <div className='adminToolbar'>
+        <div>
+          <h2>GTIN</h2>
+          <p>Catalogo de GTIN disponibles para numeros de parte.</p>
+        </div>
+
+        <div className='adminToolbarActions'>
+          <button
+            className='buttonSelector'
+            type='button'
+            onClick={() => {
+              setMessage(null);
+              setIsCreateGtinModalOpen(true);
+            }}
+          >
+            Crear nuevo
+          </button>
+          <button className='buttonSelector' type='button' onClick={() => void loadGtins()}>
+            Recargar
+          </button>
+        </div>
+      </div>
+
+      <div className='adminTableCard'>
+        <div className='adminTableHeader'>
+          <h3>Listado de GTIN</h3>
+          <p className='adminTableMeta'>
+            {isLoadingGtins ? 'Cargando...' : `${gtins.length} registros encontrados`}
+          </p>
+        </div>
+
+        <div className='adminTableWrapper'>
+          <table className='adminTable'>
+            <thead>
+              <tr>
+                <th>GTIN</th>
+                <th>Fecha de creacion</th>
+                <th>Ultima actualizacion</th>
+                <th>Estatus</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoadingGtins ? (
+                <tr>
+                  <td colSpan={5} className='adminTableEmpty'>
+                    Cargando GTIN...
+                  </td>
+                </tr>
+              ) : gtins.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className='adminTableEmpty'>
+                    No hay GTIN registrados por mostrar.
+                  </td>
+                </tr>
+              ) : (
+                gtins.map((gtin) => (
+                  <tr key={gtin._id}>
+                    <td>{gtin.value}</td>
+                    <td>{formatDate(gtin.createdAt)}</td>
+                    <td>{formatDate(gtin.updatedAt)}</td>
+                    <td>
+                      <span className={`adminBadge ${gtin.isActive ? 'active' : 'inactive'}`}>
+                        {gtin.isActive ? 'Activo' : 'Inactivo'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className='adminActionRow'>
+                        <button
+                          className='adminActionButton'
+                          type='button'
+                          onClick={() => {
+                            setMessage(null);
+                            setEditingGtin(gtin);
+                          }}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          className='adminActionButton'
+                          type='button'
+                          onClick={() => {
+                            setMessage(null);
+                            setPendingGtinAction({
+                              type: gtin.isActive ? 'deactivate' : 'activate',
+                              gtin,
+                            });
+                          }}
+                        >
+                          {gtin.isActive ? 'Desactivar' : 'Activar'}
+                        </button>
+                        {gtin.isActive && (
+                          <button
+                            className='adminActionButton delete'
+                            type='button'
+                            onClick={() => {
+                              setMessage(null);
+                              setPendingGtinAction({
+                                type: 'delete',
+                                gtin,
+                              });
+                            }}
+                          >
+                            Eliminar
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  );
+
+  const renderRfidProgramsSection = () => (
+    <section className='adminSectionStack'>
+      <div className='adminToolbar'>
+        <div>
+          <h2>RFID Program</h2>
+          <p>Catalogo de RFID Program disponibles para numeros de parte.</p>
+        </div>
+
+        <div className='adminToolbarActions'>
+          <button
+            className='buttonSelector'
+            type='button'
+            onClick={() => {
+              setMessage(null);
+              setIsCreateRfidProgramModalOpen(true);
+            }}
+          >
+            Crear nuevo
+          </button>
+          <button className='buttonSelector' type='button' onClick={() => void loadRfidPrograms()}>
+            Recargar
+          </button>
+        </div>
+      </div>
+
+      <div className='adminTableCard'>
+        <div className='adminTableHeader'>
+          <h3>Listado de RFID Program</h3>
+          <p className='adminTableMeta'>
+            {isLoadingRfidPrograms ? 'Cargando...' : `${rfidPrograms.length} registros encontrados`}
+          </p>
+        </div>
+
+        <div className='adminTableWrapper'>
+          <table className='adminTable'>
+            <thead>
+              <tr>
+                <th>RFID Program</th>
+                <th>Fecha de creacion</th>
+                <th>Ultima actualizacion</th>
+                <th>Estatus</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoadingRfidPrograms ? (
+                <tr>
+                  <td colSpan={5} className='adminTableEmpty'>
+                    Cargando RFID Program...
+                  </td>
+                </tr>
+              ) : rfidPrograms.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className='adminTableEmpty'>
+                    No hay RFID Program registrados por mostrar.
+                  </td>
+                </tr>
+              ) : (
+                rfidPrograms.map((rfidProgram) => (
+                  <tr key={rfidProgram._id}>
+                    <td>{rfidProgram.value}</td>
+                    <td>{formatDate(rfidProgram.createdAt)}</td>
+                    <td>{formatDate(rfidProgram.updatedAt)}</td>
+                    <td>
+                      <span
+                        className={`adminBadge ${rfidProgram.isActive ? 'active' : 'inactive'}`}
+                      >
+                        {rfidProgram.isActive ? 'Activo' : 'Inactivo'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className='adminActionRow'>
+                        <button
+                          className='adminActionButton'
+                          type='button'
+                          onClick={() => {
+                            setMessage(null);
+                            setEditingRfidProgram(rfidProgram);
+                          }}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          className='adminActionButton'
+                          type='button'
+                          onClick={() => {
+                            setMessage(null);
+                            setPendingRfidProgramAction({
+                              type: rfidProgram.isActive ? 'deactivate' : 'activate',
+                              rfidProgram,
+                            });
+                          }}
+                        >
+                          {rfidProgram.isActive ? 'Desactivar' : 'Activar'}
+                        </button>
+                        {rfidProgram.isActive && (
+                          <button
+                            className='adminActionButton delete'
+                            type='button'
+                            onClick={() => {
+                              setMessage(null);
+                              setPendingRfidProgramAction({
+                                type: 'delete',
+                                rfidProgram,
+                              });
+                            }}
+                          >
+                            Eliminar
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  );
+
   const renderUsersSection = () => (
     <section className='adminSectionStack'>
       <article className='adminInfoCard'>
@@ -495,15 +977,9 @@ function AdministrationDashboardPage() {
       case 'partNumbers':
         return renderPartNumbersSection();
       case 'gtin':
-        return renderPlaceholderSection(
-          'GTIN',
-          'Este espacio queda listo para agregar vistas o herramientas especificas de GTIN.',
-        );
+        return renderGtinsSection();
       case 'rfidProgram':
-        return renderPlaceholderSection(
-          'RFID Program',
-          'Este espacio queda listo para agregar vistas o herramientas especificas de RFID Program.',
-        );
+        return renderRfidProgramsSection();
       case 'serviceOrder':
         return renderPlaceholderSection(
           'Orden de servicio',
@@ -602,6 +1078,26 @@ function AdministrationDashboardPage() {
         />
       )}
 
+      {isCreateGtinModalOpen && (
+        <GtinFormModal
+          title='Crear GTIN'
+          submitLabel='Guardar GTIN'
+          submittingLabel='Guardando...'
+          onClose={() => setIsCreateGtinModalOpen(false)}
+          onSubmit={handleCreateGtin}
+        />
+      )}
+
+      {isCreateRfidProgramModalOpen && (
+        <RfidProgramFormModal
+          title='Crear RFID Program'
+          submitLabel='Guardar RFID Program'
+          submittingLabel='Guardando...'
+          onClose={() => setIsCreateRfidProgramModalOpen(false)}
+          onSubmit={handleCreateRfidProgram}
+        />
+      )}
+
       {isRegisterModalOpen && (
         <RegisterModal
           onClose={() => setIsRegisterModalOpen(false)}
@@ -626,6 +1122,28 @@ function AdministrationDashboardPage() {
         />
       )}
 
+      {editingGtin && (
+        <GtinFormModal
+          title={`Editar ${editingGtin.value}`}
+          submitLabel='Guardar cambios'
+          submittingLabel='Actualizando...'
+          initialData={editingGtin}
+          onClose={() => setEditingGtin(null)}
+          onSubmit={handleUpdateGtin}
+        />
+      )}
+
+      {editingRfidProgram && (
+        <RfidProgramFormModal
+          title={`Editar ${editingRfidProgram.value}`}
+          submitLabel='Guardar cambios'
+          submittingLabel='Actualizando...'
+          initialData={editingRfidProgram}
+          onClose={() => setEditingRfidProgram(null)}
+          onSubmit={handleUpdateRfidProgram}
+        />
+      )}
+
       {copyingPartConfig && (
         <PartConfigFormModal
           title={`Copiar ${copyingPartConfig.partNumber}`}
@@ -635,6 +1153,66 @@ function AdministrationDashboardPage() {
           copySourcePartNumber={copyingPartConfig.partNumber}
           onClose={() => setCopyingPartConfig(null)}
           onSubmit={handleCopyPartConfig}
+        />
+      )}
+
+      {pendingGtinAction && (
+        <ConfirmActionModal
+          title={
+            pendingGtinAction.type === 'delete'
+              ? 'Confirmar eliminacion de GTIN'
+              : pendingGtinAction.type === 'deactivate'
+                ? 'Confirmar desactivacion de GTIN'
+                : 'Confirmar activacion de GTIN'
+          }
+          message={
+            pendingGtinAction.type === 'delete'
+              ? `Se eliminara el GTIN ${pendingGtinAction.gtin.value}. En el backend actual esta accion lo desactiva, no lo borra permanentemente. Deseas continuar?`
+              : pendingGtinAction.type === 'deactivate'
+                ? `Se desactivara el GTIN ${pendingGtinAction.gtin.value}. Deseas continuar?`
+                : `Se activara el GTIN ${pendingGtinAction.gtin.value}. Deseas continuar?`
+          }
+          confirmLabel={
+            pendingGtinAction.type === 'delete'
+              ? 'Eliminar'
+              : pendingGtinAction.type === 'deactivate'
+                ? 'Desactivar'
+                : 'Activar'
+          }
+          confirmVariant={pendingGtinAction.type === 'delete' ? 'danger' : 'default'}
+          isSubmitting={isSubmittingGtinAction}
+          onCancel={() => setPendingGtinAction(null)}
+          onConfirm={handleConfirmPendingGtinAction}
+        />
+      )}
+
+      {pendingRfidProgramAction && (
+        <ConfirmActionModal
+          title={
+            pendingRfidProgramAction.type === 'delete'
+              ? 'Confirmar eliminacion de RFID Program'
+              : pendingRfidProgramAction.type === 'deactivate'
+                ? 'Confirmar desactivacion de RFID Program'
+                : 'Confirmar activacion de RFID Program'
+          }
+          message={
+            pendingRfidProgramAction.type === 'delete'
+              ? `Se eliminara el RFID Program ${pendingRfidProgramAction.rfidProgram.value}. En el backend actual esta accion lo desactiva, no lo borra permanentemente. Deseas continuar?`
+              : pendingRfidProgramAction.type === 'deactivate'
+                ? `Se desactivara el RFID Program ${pendingRfidProgramAction.rfidProgram.value}. Deseas continuar?`
+                : `Se activara el RFID Program ${pendingRfidProgramAction.rfidProgram.value}. Deseas continuar?`
+          }
+          confirmLabel={
+            pendingRfidProgramAction.type === 'delete'
+              ? 'Eliminar'
+              : pendingRfidProgramAction.type === 'deactivate'
+                ? 'Desactivar'
+                : 'Activar'
+          }
+          confirmVariant={pendingRfidProgramAction.type === 'delete' ? 'danger' : 'default'}
+          isSubmitting={isSubmittingRfidProgramAction}
+          onCancel={() => setPendingRfidProgramAction(null)}
+          onConfirm={handleConfirmPendingRfidProgramAction}
         />
       )}
 
