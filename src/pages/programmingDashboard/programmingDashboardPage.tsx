@@ -4,17 +4,21 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { useNavigate } from 'react-router-dom';
 import AppSceneLayout from '../../components/appSceneLayout';
 import { createDoubleScanRead, resolveFirstDoubleScan } from '../../services/doubleScanService';
-import type {
-  DoubleScanReadResponse,
-  DoubleScanResolvedPartConfigOption,
-} from '../../types/DoubleScan';
-import type { PartConfig, PartConfigListResponse, ReadingMode } from '../../types/PartConfig';
+import {
+  listOpenServiceOrdersByGtin,
+  listOpenManualServiceOrders,
+  listServiceOrderPartConfigOptions,
+} from '../../services/serviceOrderService';
+import type { DoubleScanReadResponse } from '../../types/DoubleScan';
+import type { ServiceOrder, ServiceOrderPartConfigOption } from '../../types/ServiceOrder';
 
 type Mode = 'Manual' | 'Scan' | 'DoubleScan' | null;
 type FeedbackMessage = { type: 'success' | 'error' | 'info'; text: string };
 type DoubleScanStep =
   | 'waiting_first'
   | 'resolving_first'
+  | 'selecting_service_order'
+  | 'resolving_part_configs'
   | 'selecting_part_config'
   | 'waiting_second'
   | 'submitting'
@@ -28,10 +32,12 @@ function ProgrammingDashboardPage() {
   const [port, setPort] = useState('');
   const [mode, setMode] = useState<Mode>(null);
 
-  const [manualPartConfigs, setManualPartConfigs] = useState<PartConfig[]>([]);
-  const [isLoadingManualConfigs, setIsLoadingManualConfigs] = useState(false);
-  const [manualConfigMessage, setManualConfigMessage] = useState<FeedbackMessage | null>(null);
+  const [isLoadingManualServiceOrders, setIsLoadingManualServiceOrders] = useState(false);
+  const [isLoadingManualPartOptions, setIsLoadingManualPartOptions] = useState(false);
   const [partNumber, setPartNumber] = useState('');
+  const [manualServiceOrderOptions, setManualServiceOrderOptions] = useState<ServiceOrder[]>([]);
+  const [manualPartOptions, setManualPartOptions] = useState<ServiceOrderPartConfigOption[]>([]);
+  const [selectedManualServiceOrderId, setSelectedManualServiceOrderId] = useState('');
   const [lot, setLot] = useState('');
   const [manufactureDate, setManufactureDate] = useState('');
   const [isSubmittingManual, setIsSubmittingManual] = useState(false);
@@ -39,25 +45,29 @@ function ProgrammingDashboardPage() {
 
   const [firstBarcodeRaw, setFirstBarcodeRaw] = useState('');
   const [resolvedGtin, setResolvedGtin] = useState('');
-  const [doubleScanOptions, setDoubleScanOptions] = useState<DoubleScanResolvedPartConfigOption[]>(
-    [],
-  );
+  const [serviceOrderOptions, setServiceOrderOptions] = useState<ServiceOrder[]>([]);
+  const [selectedServiceOrderId, setSelectedServiceOrderId] = useState('');
+  const [doubleScanOptions, setDoubleScanOptions] = useState<ServiceOrderPartConfigOption[]>([]);
   const [selectedPartConfigId, setSelectedPartConfigId] = useState('');
   const [secondBarcodeRaw, setSecondBarcodeRaw] = useState('');
-  const [serviceOrder, setServiceOrder] = useState('');
   const [doubleScanNotes, setDoubleScanNotes] = useState('');
   const [doubleScanStep, setDoubleScanStep] = useState<DoubleScanStep>('waiting_first');
   const [doubleScanMessage, setDoubleScanMessage] = useState<FeedbackMessage | null>(null);
   const [doubleScanResult, setDoubleScanResult] = useState<DoubleScanReadResponse | null>(null);
 
   const firstBarcodeInputRef = useRef<HTMLInputElement>(null);
+  const serviceOrderSelectRef = useRef<HTMLSelectElement>(null);
   const partConfigSelectRef = useRef<HTMLSelectElement>(null);
   const secondBarcodeInputRef = useRef<HTMLInputElement>(null);
   const successResetTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
-  const selectedManualConfig = manualPartConfigs.find((config) => config.partNumber === partNumber);
+  const selectedManualConfig = manualPartOptions.find((option) => option.partNumber === partNumber);
+  const selectedManualServiceOrder = manualServiceOrderOptions.find(
+    (serviceOrder) => serviceOrder._id === selectedManualServiceOrderId,
+  );
+  const selectedServiceOrder = serviceOrderOptions.find((serviceOrder) => serviceOrder._id === selectedServiceOrderId);
   const selectedDoubleScanConfig = doubleScanOptions.find((option) => option.id === selectedPartConfigId);
-  const hasMultipleDoubleScanOptions = doubleScanOptions.length > 1;
+  const hasMultipleServiceOrderOptions = serviceOrderOptions.length > 1;
 
   useEffect(() => {
     if (mode !== 'DoubleScan') {
@@ -70,6 +80,11 @@ function ProgrammingDashboardPage() {
       doubleScanStep === 'error'
     ) {
       firstBarcodeInputRef.current?.focus();
+      return;
+    }
+
+    if (doubleScanStep === 'selecting_service_order') {
+      serviceOrderSelectRef.current?.focus();
       return;
     }
 
@@ -91,27 +106,11 @@ function ProgrammingDashboardPage() {
     };
   }, []);
 
-  const fetchPartConfigs = async (
-    readingMode: Extract<ReadingMode, 'manual' | 'double_scan'>,
-  ): Promise<PartConfig[]> => {
-    const response = await fetch(
-      `${API_URL}/api/part-configs?readingMode=${readingMode}&isActive=true`,
-    );
-    const result = (await response.json().catch(() => null)) as PartConfigListResponse | null;
-
-    if (!response.ok) {
-      throw new Error(
-        readingMode === 'manual'
-          ? 'No se pudo cargar el catalogo de lectura manual.'
-          : 'No se pudo cargar el catalogo de doble lectura.',
-      );
-    }
-
-    return result?.data ?? [];
-  };
-
   const resetManualForm = () => {
     setPartNumber('');
+    setManualServiceOrderOptions([]);
+    setManualPartOptions([]);
+    setSelectedManualServiceOrderId('');
     setLot('');
     setManufactureDate('');
     setManualMessage(null);
@@ -127,6 +126,8 @@ function ProgrammingDashboardPage() {
   const resetDoubleScanCycle = (nextMessage: FeedbackMessage | null = null) => {
     setFirstBarcodeRaw('');
     setResolvedGtin('');
+    setServiceOrderOptions([]);
+    setSelectedServiceOrderId('');
     setDoubleScanOptions([]);
     setSelectedPartConfigId('');
     setSecondBarcodeRaw('');
@@ -138,35 +139,133 @@ function ProgrammingDashboardPage() {
   const resetDoubleScanFlow = () => {
     clearSuccessResetTimeout();
     resetDoubleScanCycle();
-    setServiceOrder('');
     setDoubleScanNotes('');
   };
 
-  const loadManualPartConfigs = async () => {
-    setIsLoadingManualConfigs(true);
-    setManualConfigMessage(null);
+  const loadManualServiceOrders = async () => {
+    setIsLoadingManualServiceOrders(true);
+    setManualMessage(null);
+    setManualServiceOrderOptions([]);
+    setManualPartOptions([]);
+    setSelectedManualServiceOrderId('');
+    setPartNumber('');
 
     try {
-      const configs = await fetchPartConfigs('manual');
-      setManualPartConfigs(configs);
+      const serviceOrders = await listOpenManualServiceOrders();
+      setManualServiceOrderOptions(serviceOrders);
+
+      if (serviceOrders.length === 0) {
+        setManualMessage({
+          type: 'info',
+          text: 'No hay ordenes de servicio manuales abiertas disponibles.',
+        });
+        return;
+      }
+
+      setManualMessage({
+        type: 'info',
+        text: 'Selecciona primero la orden de servicio manual.',
+      });
     } catch (error) {
-      setManualConfigMessage({
+      setManualMessage({
         type: 'error',
         text:
           error instanceof Error
             ? error.message
-            : 'No se pudo cargar el catalogo de lectura manual.',
+            : 'No se pudieron cargar las ordenes de servicio manuales.',
       });
-      setManualPartConfigs([]);
     } finally {
-      setIsLoadingManualConfigs(false);
+      setIsLoadingManualServiceOrders(false);
+    }
+  };
+
+  const loadPartConfigOptionsForServiceOrder = async (serviceOrderId: string) => {
+    setDoubleScanStep('resolving_part_configs');
+    setDoubleScanMessage(null);
+    setDoubleScanOptions([]);
+    setSelectedPartConfigId('');
+    setSecondBarcodeRaw('');
+    setDoubleScanResult(null);
+
+    try {
+      const options = await listServiceOrderPartConfigOptions(serviceOrderId, 'double_scan');
+      setDoubleScanOptions(options);
+
+      if (options.length === 0) {
+        setDoubleScanStep('selecting_service_order');
+        setDoubleScanMessage({
+          type: 'error',
+          text: 'La orden seleccionada no tiene numeros de parte activos para doble codigo.',
+        });
+        return;
+      }
+
+      if (options.length === 1) {
+        setSelectedPartConfigId(options[0].id);
+        setDoubleScanStep('waiting_second');
+        setDoubleScanMessage({
+          type: 'success',
+          text: 'Orden de servicio seleccionada. Numero de parte resuelto automaticamente. Escanea el segundo codigo.',
+        });
+        return;
+      }
+
+      setDoubleScanStep('selecting_part_config');
+      setDoubleScanMessage({
+        type: 'info',
+        text: 'Selecciona el numero de parte correcto para la orden elegida.',
+      });
+    } catch (error) {
+      setDoubleScanStep('selecting_service_order');
+      setDoubleScanMessage({
+        type: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'No se pudieron resolver los numeros de parte para la orden seleccionada.',
+      });
+    }
+  };
+
+  const loadManualPartOptionsForServiceOrder = async (serviceOrderId: string) => {
+    setIsLoadingManualPartOptions(true);
+    setManualMessage(null);
+    setManualPartOptions([]);
+    setPartNumber('');
+
+    try {
+      const options = await listServiceOrderPartConfigOptions(serviceOrderId, 'manual');
+      setManualPartOptions(options);
+
+      if (options.length === 0) {
+        setManualMessage({
+          type: 'error',
+          text: 'La orden de servicio seleccionada no tiene numero de parte manual activo.',
+        });
+        return;
+      }
+
+      setManualMessage({
+        type: 'info',
+        text: 'Selecciona el numero de parte solicitado por la orden de servicio.',
+      });
+    } catch (error) {
+      setManualMessage({
+        type: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'No se pudo cargar el numero de parte de la orden manual.',
+      });
+    } finally {
+      setIsLoadingManualPartOptions(false);
     }
   };
 
   const openManualModal = () => {
     resetManualForm();
     setMode('Manual');
-    void loadManualPartConfigs();
+    void loadManualServiceOrders();
   };
 
   const closeManualModal = () => {
@@ -184,7 +283,11 @@ function ProgrammingDashboardPage() {
   };
 
   const closeDoubleScanModal = () => {
-    if (doubleScanStep === 'resolving_first' || doubleScanStep === 'submitting') {
+    if (
+      doubleScanStep === 'resolving_first' ||
+      doubleScanStep === 'resolving_part_configs' ||
+      doubleScanStep === 'submitting'
+    ) {
       return;
     }
 
@@ -196,11 +299,12 @@ function ProgrammingDashboardPage() {
     event.preventDefault();
 
     const trimmedLot = lot.trim();
+    const trimmedManufactureDate = manufactureDate.trim();
 
-    if (!partNumber || !trimmedLot || !manufactureDate) {
+    if (!partNumber || !selectedManualServiceOrderId) {
       setManualMessage({
         type: 'error',
-        text: 'Completa numero de parte, lote y fecha de manufactura.',
+        text: 'Selecciona numero de parte y una orden de servicio manual valida.',
       });
       return;
     }
@@ -210,11 +314,11 @@ function ProgrammingDashboardPage() {
 
     try {
       const payload = {
+        serviceOrderId: selectedManualServiceOrderId,
         partNumber,
-        lot: trimmedLot,
-        manufactureDate,
+        lot: trimmedLot || undefined,
+        manufactureDate: trimmedManufactureDate || undefined,
         rfidProgram: selectedManualConfig?.rfidProgram,
-        gtin: selectedManualConfig?.expectedGtin,
         filterLabel: selectedManualConfig?.filterLabel,
         rawReference: 'manual',
         notes: 'captura manual',
@@ -264,39 +368,40 @@ function ProgrammingDashboardPage() {
     setDoubleScanMessage(null);
     setDoubleScanResult(null);
     setResolvedGtin('');
+    setServiceOrderOptions([]);
+    setSelectedServiceOrderId('');
     setDoubleScanOptions([]);
     setSelectedPartConfigId('');
     setSecondBarcodeRaw('');
 
     try {
       const result = await resolveFirstDoubleScan(trimmedFirstBarcode);
+      const matchingServiceOrders = await listOpenServiceOrdersByGtin(result.gtin);
+
       setFirstBarcodeRaw(result.firstBarcodeRaw);
       setResolvedGtin(result.gtin);
-      setDoubleScanOptions(result.options);
+      setServiceOrderOptions(matchingServiceOrders);
 
-      if (result.options.length === 0) {
+      if (matchingServiceOrders.length === 0) {
         setDoubleScanStep('waiting_first');
         setDoubleScanMessage({
           type: 'error',
-          text: 'No hay configuraciones activas para el GTIN detectado.',
+          text: 'No hay ordenes de servicio abiertas para el GTIN detectado.',
         });
         return;
       }
 
-      if (result.autoSelectedPartConfigId) {
-        setSelectedPartConfigId(result.autoSelectedPartConfigId);
-        setDoubleScanStep('waiting_second');
-        setDoubleScanMessage({
-          type: 'success',
-          text: 'GTIN resuelto. Configuracion seleccionada automaticamente. Escanea el segundo codigo.',
-        });
+      if (matchingServiceOrders.length === 1) {
+        const [singleServiceOrder] = matchingServiceOrders;
+        setSelectedServiceOrderId(singleServiceOrder._id);
+        await loadPartConfigOptionsForServiceOrder(singleServiceOrder._id);
         return;
       }
 
-      setDoubleScanStep('selecting_part_config');
+      setDoubleScanStep('selecting_service_order');
       setDoubleScanMessage({
         type: 'info',
-        text: 'Se encontraron varias configuraciones para el GTIN. Selecciona el numero de parte correcto.',
+        text: 'Se encontraron varias ordenes para el GTIN. Selecciona primero la orden de servicio.',
       });
     } catch (error) {
       setDoubleScanStep('waiting_first');
@@ -314,6 +419,42 @@ function ProgrammingDashboardPage() {
 
     event.preventDefault();
     await handleResolveFirstBarcode();
+  };
+
+  const handleManualServiceOrderSelection = (nextServiceOrderId: string) => {
+    setSelectedManualServiceOrderId(nextServiceOrderId);
+    setManualPartOptions([]);
+    setPartNumber('');
+    setManualMessage(null);
+
+    if (!nextServiceOrderId) {
+      setManualMessage({
+        type: 'info',
+        text: 'Selecciona una orden de servicio manual para continuar.',
+      });
+      return;
+    }
+
+    void loadManualPartOptionsForServiceOrder(nextServiceOrderId);
+  };
+
+  const handleServiceOrderSelection = async (nextServiceOrderId: string) => {
+    setSelectedServiceOrderId(nextServiceOrderId);
+    setDoubleScanOptions([]);
+    setSelectedPartConfigId('');
+    setSecondBarcodeRaw('');
+    setDoubleScanResult(null);
+
+    if (!nextServiceOrderId) {
+      setDoubleScanStep('selecting_service_order');
+      setDoubleScanMessage({
+        type: 'info',
+        text: 'Selecciona una orden de servicio antes de continuar.',
+      });
+      return;
+    }
+
+    await loadPartConfigOptionsForServiceOrder(nextServiceOrderId);
   };
 
   const handlePartConfigSelection = (nextPartConfigId: string) => {
@@ -338,8 +479,15 @@ function ProgrammingDashboardPage() {
   const submitDoubleScan = async () => {
     const trimmedFirstBarcode = firstBarcodeRaw.trim();
     const trimmedSecondBarcode = secondBarcodeRaw.trim();
-    const trimmedServiceOrder = serviceOrder.trim();
     const trimmedNotes = doubleScanNotes.trim();
+
+    if (!selectedServiceOrderId) {
+      setDoubleScanMessage({
+        type: 'error',
+        text: 'Selecciona una orden de servicio valida antes de registrar la lectura.',
+      });
+      return;
+    }
 
     if (!selectedPartConfigId) {
       setDoubleScanMessage({
@@ -363,10 +511,10 @@ function ProgrammingDashboardPage() {
 
     try {
       const result = await createDoubleScanRead({
+        serviceOrderId: selectedServiceOrderId,
         partConfigId: selectedPartConfigId,
         firstBarcodeRaw: trimmedFirstBarcode,
         secondBarcodeRaw: trimmedSecondBarcode,
-        serviceOrder: trimmedServiceOrder || undefined,
         notes: trimmedNotes || undefined,
       });
 
@@ -415,7 +563,9 @@ function ProgrammingDashboardPage() {
   };
 
   const isResolvingOrSubmitting =
-    doubleScanStep === 'resolving_first' || doubleScanStep === 'submitting';
+    doubleScanStep === 'resolving_first' ||
+    doubleScanStep === 'resolving_part_configs' ||
+    doubleScanStep === 'submitting';
 
   return (
     <>
@@ -466,31 +616,65 @@ function ProgrammingDashboardPage() {
 
             <form className='modalForm' onSubmit={handleManualSubmit}>
               <label className='modalField'>
-                <span>Numero de Parte:</span>
+                <span>Orden de servicio:</span>
                 <select
-                  aria-label='partNumber'
-                  value={partNumber}
-                  onChange={(event) => setPartNumber(event.target.value)}
-                  disabled={isLoadingManualConfigs || isSubmittingManual}
+                  aria-label='manualServiceOrderId'
+                  value={selectedManualServiceOrderId}
+                  onChange={(event) => handleManualServiceOrderSelection(event.target.value)}
+                  disabled={isLoadingManualServiceOrders || isSubmittingManual}
                   required
                 >
                   <option value=''>Selecciona</option>
-                  {manualPartConfigs.map((config) => (
-                    <option key={config._id} value={config.partNumber}>
-                      {config.partNumber}
+                  {manualServiceOrderOptions.map((serviceOrder) => (
+                    <option key={serviceOrder._id} value={serviceOrder._id}>
+                      {serviceOrder.folio}
+                      {serviceOrder.rfidProgram ? ` | ${serviceOrder.rfidProgram}` : ''}
+                      {serviceOrder.partNumber ? ` | ${serviceOrder.partNumber}` : ''}
                     </option>
                   ))}
                 </select>
               </label>
 
-              {isLoadingManualConfigs && <p className='manualHint'>Cargando numeros de parte...</p>}
-
-              {manualConfigMessage && (
-                <p className={`manualMessage ${manualConfigMessage.type}`}>{manualConfigMessage.text}</p>
+              {isLoadingManualServiceOrders && (
+                <p className='manualHint'>Cargando ordenes de servicio manuales...</p>
+              )}
+              {!isLoadingManualServiceOrders && manualServiceOrderOptions.length === 0 && !manualMessage && (
+                <p className='manualHint'>No hay ordenes manuales disponibles.</p>
               )}
 
-              {!isLoadingManualConfigs && !manualConfigMessage && manualPartConfigs.length === 0 && (
-                <p className='manualHint'>No hay numeros de parte manuales activos.</p>
+              <label className='modalField'>
+                <span>Numero de Parte:</span>
+                <select
+                  aria-label='partNumber'
+                  value={partNumber}
+                  onChange={(event) => setPartNumber(event.target.value)}
+                  disabled={!selectedManualServiceOrderId || isLoadingManualPartOptions || isSubmittingManual}
+                  required
+                >
+                  <option value=''>Selecciona</option>
+                  {manualPartOptions.map((option) => (
+                    <option key={option.id} value={option.partNumber}>
+                      {option.partNumber}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {isLoadingManualPartOptions && (
+                <p className='manualHint'>Cargando numero de parte solicitado por la orden...</p>
+              )}
+
+              {selectedManualServiceOrder && (
+                <div className='scanSummaryBlock'>
+                  <p>Orden seleccionada: {selectedManualServiceOrder.folio}</p>
+                  <p>Cantidad planeada: {selectedManualServiceOrder.quantity}</p>
+                  {selectedManualServiceOrder.partNumber && (
+                    <p>Numero de parte solicitado: {selectedManualServiceOrder.partNumber}</p>
+                  )}
+                  {selectedManualServiceOrder.rfidProgram && (
+                    <p>Programa RFID esperado: {selectedManualServiceOrder.rfidProgram}</p>
+                  )}
+                </div>
               )}
 
               <label className='modalField'>
@@ -499,9 +683,8 @@ function ProgrammingDashboardPage() {
                   type='text'
                   value={lot}
                   onChange={(event) => setLot(event.target.value)}
-                  placeholder='QWE123ASD12'
+                  placeholder='Opcional'
                   disabled={isSubmittingManual}
-                  required
                 />
               </label>
 
@@ -512,7 +695,6 @@ function ProgrammingDashboardPage() {
                   value={manufactureDate}
                   onChange={(event) => setManufactureDate(event.target.value)}
                   disabled={isSubmittingManual}
-                  required
                 />
               </label>
 
@@ -521,19 +703,19 @@ function ProgrammingDashboardPage() {
                   {selectedManualConfig.rfidProgram && (
                     <p>Programa RFID: {selectedManualConfig.rfidProgram}</p>
                   )}
-                  {selectedManualConfig.expectedGtin && (
-                    <p>GTIN esperado: {selectedManualConfig.expectedGtin}</p>
-                  )}
                   {selectedManualConfig.filterLabel && (
                     <p>Filter label: {selectedManualConfig.filterLabel}</p>
                   )}
-                  {selectedManualConfig.notes && <p>{selectedManualConfig.notes}</p>}
                 </div>
               )}
 
               {manualMessage && <p className={`manualMessage ${manualMessage.type}`}>{manualMessage.text}</p>}
 
-              <button className='buttonSelector modalSubmitButton' type='submit' disabled={isSubmittingManual}>
+              <button
+                className='buttonSelector modalSubmitButton'
+                type='submit'
+                disabled={isSubmittingManual || !partNumber || !selectedManualServiceOrderId}
+              >
                 {isSubmittingManual ? 'Guardando...' : 'Ingresar valores'}
               </button>
             </form>
@@ -569,6 +751,8 @@ function ProgrammingDashboardPage() {
                   placeholder='Escanea el primer codigo'
                   disabled={
                     doubleScanStep === 'resolving_first' ||
+                    doubleScanStep === 'selecting_service_order' ||
+                    doubleScanStep === 'resolving_part_configs' ||
                     doubleScanStep === 'selecting_part_config' ||
                     doubleScanStep === 'waiting_second' ||
                     doubleScanStep === 'submitting'
@@ -585,6 +769,7 @@ function ProgrammingDashboardPage() {
                   disabled={
                     isResolvingOrSubmitting ||
                     !firstBarcodeRaw.trim() ||
+                    doubleScanStep === 'selecting_service_order' ||
                     doubleScanStep === 'selecting_part_config' ||
                     doubleScanStep === 'waiting_second'
                   }
@@ -600,7 +785,38 @@ function ProgrammingDashboardPage() {
                 </div>
               )}
 
-              {hasMultipleDoubleScanOptions && (
+              {serviceOrderOptions.length > 0 && (
+                <label className='modalField'>
+                  <span>Orden de servicio:</span>
+                  <select
+                    ref={serviceOrderSelectRef}
+                    aria-label='serviceOrderId'
+                    value={selectedServiceOrderId}
+                    onChange={(event) => void handleServiceOrderSelection(event.target.value)}
+                    disabled={isResolvingOrSubmitting}
+                    required
+                  >
+                    <option value=''>Selecciona una orden</option>
+                    {serviceOrderOptions.map((serviceOrderOption) => (
+                      <option key={serviceOrderOption._id} value={serviceOrderOption._id}>
+                        {serviceOrderOption.folio}
+                        {serviceOrderOption.rfidProgram ? ` | ${serviceOrderOption.rfidProgram}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              {selectedServiceOrder && (
+                <div className='scanSummaryBlock'>
+                  <p>Orden seleccionada: {selectedServiceOrder.folio}</p>
+                  <p>GTIN esperado: {selectedServiceOrder.gtin}</p>
+                  <p>Programa RFID esperado: {selectedServiceOrder.rfidProgram}</p>
+                  <p>Cantidad planeada: {selectedServiceOrder.quantity}</p>
+                </div>
+              )}
+
+              {selectedServiceOrderId && doubleScanOptions.length > 0 && (
                 <label className='modalField'>
                   <span>Numero de Parte:</span>
                   <select
@@ -611,7 +827,7 @@ function ProgrammingDashboardPage() {
                     disabled={isResolvingOrSubmitting}
                     required
                   >
-                    <option value=''>Selecciona una opcion</option>
+                    <option value=''>Selecciona un numero de parte</option>
                     {doubleScanOptions.map((option) => (
                       <option key={option.id} value={option.id}>
                         {option.partNumber}
@@ -637,18 +853,6 @@ function ProgrammingDashboardPage() {
                   )}
                 </div>
               )}
-
-              <label className='modalField'>
-                <span>Service Order:</span>
-                <input
-                  type='text'
-                  value={serviceOrder}
-                  onChange={(event) => setServiceOrder(event.target.value)}
-                  placeholder='SO-001'
-                  disabled={isResolvingOrSubmitting}
-                  autoComplete='off'
-                />
-              </label>
 
               <label className='modalField'>
                 <span>Notas:</span>
@@ -678,8 +882,14 @@ function ProgrammingDashboardPage() {
               <p className='manualHint'>
                 {doubleScanStep === 'resolving_first'
                   ? 'Resolviendo el GTIN del primer codigo...'
-                  : doubleScanStep === 'selecting_part_config'
-                    ? 'Selecciona la configuracion correcta para continuar.'
+                  : doubleScanStep === 'selecting_service_order'
+                    ? hasMultipleServiceOrderOptions
+                      ? 'Selecciona la orden de servicio correcta para continuar.'
+                      : 'Orden de servicio detectada. Preparando opciones de numero de parte.'
+                    : doubleScanStep === 'resolving_part_configs'
+                      ? 'Cargando numeros de parte para la orden seleccionada...'
+                    : doubleScanStep === 'selecting_part_config'
+                      ? 'Selecciona el numero de parte correcto para continuar.'
                     : doubleScanStep === 'success'
                       ? 'Lectura registrada. Preparando la siguiente captura...'
                     : doubleScanStep === 'waiting_second'
@@ -714,7 +924,12 @@ function ProgrammingDashboardPage() {
                 <button
                   className='buttonSelector modalSubmitButton'
                   type='submit'
-                  disabled={isResolvingOrSubmitting || !selectedPartConfigId || !secondBarcodeRaw.trim()}
+                  disabled={
+                    isResolvingOrSubmitting ||
+                    !selectedServiceOrderId ||
+                    !selectedPartConfigId ||
+                    !secondBarcodeRaw.trim()
+                  }
                 >
                   {doubleScanStep === 'submitting' ? 'Guardando...' : 'Registrar lectura'}
                 </button>

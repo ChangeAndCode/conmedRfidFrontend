@@ -20,10 +20,10 @@ export interface ResolveFirstDoubleScanResponse {
 }
 
 export interface CreateDoubleScanPayload {
+  serviceOrderId: string;
   partConfigId: string;
   firstBarcodeRaw: string;
   secondBarcodeRaw: string;
-  serviceOrder?: string;
   createdBy?: string;
   notes?: string;
 }

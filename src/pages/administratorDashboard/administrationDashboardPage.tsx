@@ -7,6 +7,8 @@ import GtinFormModal from '../../components/gtinFormModal';
 import PartConfigFormModal from '../../components/partConfigFormModal';
 import RegisterModal from '../../components/registerModal';
 import RfidProgramFormModal from '../../components/rfidProgramFormModal';
+import ServiceOrderChangeRequestResolveModal from '../../components/serviceOrderChangeRequestResolveModal';
+import ServiceOrderFormModal from '../../components/serviceOrderFormModal';
 import '../../css/administratorDashboard.css';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -31,9 +33,22 @@ import {
   listRfidPrograms,
   updateRfidProgram,
 } from '../../services/rfidProgramService';
+import {
+  createServiceOrder,
+  listServiceOrderChangeRequests,
+  listServiceOrders,
+  resolveServiceOrderChangeRequest,
+  updateServiceOrder,
+} from '../../services/serviceOrderService';
 import type { Gtin, GtinMutationPayload } from '../../types/Gtin';
 import type { PartConfig, PartConfigMutationPayload } from '../../types/PartConfig';
 import type { RfidProgram, RfidProgramMutationPayload } from '../../types/RfidProgram';
+import type {
+  ResolveServiceOrderChangeRequestPayload,
+  ServiceOrder,
+  ServiceOrderChangeRequest,
+  ServiceOrderMutationPayload,
+} from '../../types/ServiceOrder';
 
 type DashboardMessage = {
   type: 'info' | 'error' | 'success';
@@ -91,14 +106,17 @@ const ADMIN_SECTIONS: AdminSectionDefinition[] = [
     description: 'Espacio reservado para futuras herramientas de programas RFID.',
   },
   {
-    id: 'serviceOrder',
-    label: 'Orden de servicio',
-    description: 'Espacio reservado para futuras herramientas de ordenes de servicio.',
-  },
-  {
     id: 'users',
     label: 'Usuarios',
     description: 'Registro y administracion basica de usuarios.',
+  },
+];
+
+const SUPERVISOR_SECTIONS: AdminSectionDefinition[] = [
+  {
+    id: 'serviceOrder',
+    label: 'Orden de servicio',
+    description: 'Crea, edita y resuelve incidencias de ordenes de servicio.',
   },
 ];
 
@@ -132,10 +150,48 @@ const formatReadingMode = (readingMode: PartConfig['readingMode']) => {
   }
 };
 
+const formatServiceOrderStatus = (status: ServiceOrder['status']) => {
+  switch (status) {
+    case 'open':
+      return 'Open';
+    case 'blocked':
+      return 'Blocked';
+    case 'closed':
+      return 'Closed';
+    default:
+      return status;
+  }
+};
+
+const formatServiceOrderReadingMode = (readingMode: ServiceOrder['readingMode']) => {
+  return readingMode === 'manual' ? 'Manual' : 'Doble codigo';
+};
+
+const formatServiceOrderPrimaryReference = (serviceOrder: ServiceOrder) => {
+  if (serviceOrder.readingMode === 'manual') {
+    return serviceOrder.partNumber?.trim() || 'Sin numero de parte';
+  }
+
+  return serviceOrder.gtin?.trim() || 'Sin GTIN';
+};
+
+const formatChangeRequestType = (requestType: ServiceOrderChangeRequest['requestType']) => {
+  switch (requestType) {
+    case 'missing_product':
+      return 'Falta producto';
+    case 'extra_product':
+      return 'Sobra producto';
+    default:
+      return requestType;
+  }
+};
+
 function AdministrationDashboardPage() {
   const navigate = useNavigate();
-  const { logout, user } = useAuth();
-  const [activeSection, setActiveSection] = useState<AdminSectionId>('dashboard');
+  const { isAdmin, isSupervisor, logout, user } = useAuth();
+  const [activeSection, setActiveSection] = useState<AdminSectionId>(
+    isSupervisor ? 'serviceOrder' : 'dashboard',
+  );
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [partConfigs, setPartConfigs] = useState<PartConfig[]>([]);
   const [gtins, setGtins] = useState<Gtin[]>([]);
@@ -152,6 +208,14 @@ function AdministrationDashboardPage() {
   const [editingGtin, setEditingGtin] = useState<Gtin | null>(null);
   const [editingRfidProgram, setEditingRfidProgram] = useState<RfidProgram | null>(null);
   const [copyingPartConfig, setCopyingPartConfig] = useState<PartConfig | null>(null);
+  const [serviceOrders, setServiceOrders] = useState<ServiceOrder[]>([]);
+  const [changeRequests, setChangeRequests] = useState<ServiceOrderChangeRequest[]>([]);
+  const [isLoadingServiceOrders, setIsLoadingServiceOrders] = useState(false);
+  const [isLoadingChangeRequests, setIsLoadingChangeRequests] = useState(false);
+  const [isCreateServiceOrderModalOpen, setIsCreateServiceOrderModalOpen] = useState(false);
+  const [editingServiceOrder, setEditingServiceOrder] = useState<ServiceOrder | null>(null);
+  const [resolvingChangeRequest, setResolvingChangeRequest] =
+    useState<ServiceOrderChangeRequest | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAdminAction | null>(null);
   const [pendingGtinAction, setPendingGtinAction] = useState<PendingGtinAction | null>(null);
   const [pendingRfidProgramAction, setPendingRfidProgramAction] =
@@ -159,13 +223,16 @@ function AdministrationDashboardPage() {
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
   const [isSubmittingGtinAction, setIsSubmittingGtinAction] = useState(false);
   const [isSubmittingRfidProgramAction, setIsSubmittingRfidProgramAction] = useState(false);
+  const visibleSections = isSupervisor ? SUPERVISOR_SECTIONS : ADMIN_SECTIONS;
 
   const activeSectionConfig =
-    ADMIN_SECTIONS.find((section) => section.id === activeSection) ?? ADMIN_SECTIONS[0];
+    visibleSections.find((section) => section.id === activeSection) ?? visibleSections[0];
   const activePartConfigsCount = partConfigs.filter((config) => config.isActive).length;
   const inactivePartConfigsCount = partConfigs.length - activePartConfigsCount;
+  const pendingChangeRequests = changeRequests.filter((request) => request.status === 'pending');
+  const resolvedChangeRequests = changeRequests.filter((request) => request.status === 'resolved');
 
-  const loadPartConfigs = async (options?: { clearMessage?: boolean }) => {
+  const loadPartConfigs = async (options?: { clearMessage?: boolean; suppressErrorMessage?: boolean }) => {
     setIsLoading(true);
 
     if (options?.clearMessage ?? true) {
@@ -178,20 +245,22 @@ function AdministrationDashboardPage() {
       return true;
     } catch (error) {
       setPartConfigs([]);
-      setMessage({
-        type: 'error',
-        text:
-          error instanceof Error
-            ? error.message
-            : 'No se pudo conectar con el backend para cargar numeros de parte.',
-      });
+      if (!(options?.suppressErrorMessage ?? false)) {
+        setMessage({
+          type: 'error',
+          text:
+            error instanceof Error
+              ? error.message
+              : 'No se pudo conectar con el backend para cargar numeros de parte.',
+        });
+      }
       return false;
     } finally {
       setIsLoading(false);
     }
   };
 
-  const loadGtins = async (options?: { clearMessage?: boolean }) => {
+  const loadGtins = async (options?: { clearMessage?: boolean; suppressErrorMessage?: boolean }) => {
     setIsLoadingGtins(true);
 
     if (options?.clearMessage ?? true) {
@@ -204,18 +273,22 @@ function AdministrationDashboardPage() {
       return true;
     } catch (error) {
       setGtins([]);
-      setMessage({
-        type: 'error',
-        text:
-          error instanceof Error ? error.message : 'No se pudo conectar con el backend para cargar GTIN.',
-      });
+      if (!(options?.suppressErrorMessage ?? false)) {
+        setMessage({
+          type: 'error',
+          text:
+            error instanceof Error
+              ? error.message
+              : 'No se pudo conectar con el backend para cargar GTIN.',
+        });
+      }
       return false;
     } finally {
       setIsLoadingGtins(false);
     }
   };
 
-  const loadRfidPrograms = async (options?: { clearMessage?: boolean }) => {
+  const loadRfidPrograms = async (options?: { clearMessage?: boolean; suppressErrorMessage?: boolean }) => {
     setIsLoadingRfidPrograms(true);
 
     if (options?.clearMessage ?? true) {
@@ -228,24 +301,97 @@ function AdministrationDashboardPage() {
       return true;
     } catch (error) {
       setRfidPrograms([]);
-      setMessage({
-        type: 'error',
-        text:
-          error instanceof Error
-            ? error.message
-            : 'No se pudo conectar con el backend para cargar RFID Program.',
-      });
+      if (!(options?.suppressErrorMessage ?? false)) {
+        setMessage({
+          type: 'error',
+          text:
+            error instanceof Error
+              ? error.message
+              : 'No se pudo conectar con el backend para cargar RFID Program.',
+        });
+      }
       return false;
     } finally {
       setIsLoadingRfidPrograms(false);
     }
   };
 
+  const loadServiceOrders = async (options?: { clearMessage?: boolean }) => {
+    setIsLoadingServiceOrders(true);
+
+    if (options?.clearMessage ?? true) {
+      setMessage(null);
+    }
+
+    try {
+      const nextServiceOrders = await listServiceOrders();
+      setServiceOrders(nextServiceOrders);
+      return true;
+    } catch (error) {
+      setServiceOrders([]);
+      setMessage({
+        type: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'No se pudo conectar con el backend para cargar ordenes de servicio.',
+      });
+      return false;
+    } finally {
+      setIsLoadingServiceOrders(false);
+    }
+  };
+
+  const loadChangeRequests = async (options?: { clearMessage?: boolean }) => {
+    setIsLoadingChangeRequests(true);
+
+    if (options?.clearMessage ?? true) {
+      setMessage(null);
+    }
+
+    try {
+      const nextChangeRequests = await listServiceOrderChangeRequests();
+      setChangeRequests(nextChangeRequests);
+      return true;
+    } catch (error) {
+      setChangeRequests([]);
+      setMessage({
+        type: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'No se pudo conectar con el backend para cargar solicitudes de cambio.',
+      });
+      return false;
+    } finally {
+      setIsLoadingChangeRequests(false);
+    }
+  };
+
   useEffect(() => {
-    void loadPartConfigs();
-    void loadGtins({ clearMessage: false });
-    void loadRfidPrograms({ clearMessage: false });
-  }, []);
+    if (isSupervisor) {
+      void loadPartConfigs({ clearMessage: false, suppressErrorMessage: true });
+      void loadServiceOrders();
+      void loadChangeRequests({ clearMessage: false });
+      void loadGtins({ clearMessage: false, suppressErrorMessage: true });
+      void loadRfidPrograms({ clearMessage: false, suppressErrorMessage: true });
+      return;
+    }
+
+    if (isAdmin) {
+      void loadPartConfigs();
+      void loadGtins({ clearMessage: false });
+      void loadRfidPrograms({ clearMessage: false });
+    }
+  }, [isAdmin, isSupervisor]);
+
+  useEffect(() => {
+    if (visibleSections.some((section) => section.id === activeSection)) {
+      return;
+    }
+
+    setActiveSection(visibleSections[0]?.id ?? 'dashboard');
+  }, [activeSection, visibleSections]);
 
   const handleLogout = () => {
     logout();
@@ -340,6 +486,59 @@ function AdministrationDashboardPage() {
     const didRefreshList = await loadRfidPrograms({ clearMessage: false });
 
     if (didRefreshList) {
+      setMessage({
+        type: 'success',
+        text: result.message,
+      });
+    }
+  };
+
+  const handleCreateServiceOrder = async (payload: ServiceOrderMutationPayload) => {
+    const result = await createServiceOrder(payload);
+    setIsCreateServiceOrderModalOpen(false);
+    const didRefreshList = await loadServiceOrders({ clearMessage: false });
+
+    if (didRefreshList) {
+      setMessage({
+        type: 'success',
+        text: result.message,
+      });
+    }
+  };
+
+  const handleUpdateServiceOrder = async (payload: ServiceOrderMutationPayload) => {
+    if (!editingServiceOrder) {
+      throw new Error('No se encontro la orden de servicio que se quiere editar.');
+    }
+
+    const result = await updateServiceOrder(editingServiceOrder._id, payload);
+    setEditingServiceOrder(null);
+    const [didRefreshOrders, didRefreshRequests] = await Promise.all([
+      loadServiceOrders({ clearMessage: false }),
+      loadChangeRequests({ clearMessage: false }),
+    ]);
+
+    if (didRefreshOrders && didRefreshRequests) {
+      setMessage({
+        type: 'success',
+        text: result.message,
+      });
+    }
+  };
+
+  const handleResolveChangeRequest = async (payload: ResolveServiceOrderChangeRequestPayload) => {
+    if (!resolvingChangeRequest) {
+      throw new Error('No se encontro la solicitud que se quiere resolver.');
+    }
+
+    const result = await resolveServiceOrderChangeRequest(resolvingChangeRequest._id, payload);
+    setResolvingChangeRequest(null);
+    const [didRefreshOrders, didRefreshRequests] = await Promise.all([
+      loadServiceOrders({ clearMessage: false }),
+      loadChangeRequests({ clearMessage: false }),
+    ]);
+
+    if (didRefreshOrders && didRefreshRequests) {
       setMessage({
         type: 'success',
         text: result.message,
@@ -494,18 +693,6 @@ function AdministrationDashboardPage() {
       setIsSubmittingAction(false);
     }
   };
-
-  const renderPlaceholderSection = (title: string, description: string) => (
-    <section className='adminSectionStack'>
-      <article className='adminEmptyStateCard'>
-        <div className='adminSectionCardHeader'>
-          <h3>{title}</h3>
-          <p>{description}</p>
-        </div>
-        <p className='adminEmptyStateCopy'>Sin contenido por ahora.</p>
-      </article>
-    </section>
-  );
 
   const renderDashboardSection = () => (
     <section className='adminSectionStack'>
@@ -931,6 +1118,254 @@ function AdministrationDashboardPage() {
     </section>
   );
 
+  const renderServiceOrdersSection = () => (
+    <section className='adminSectionStack'>
+      <div className='adminMetricsGrid'>
+        <article className='adminMetricCard adminMetricCardPrimary'>
+          <span className='adminMetricLabel'>Ordenes totales</span>
+          <strong className='adminMetricValue'>
+            {isLoadingServiceOrders ? '...' : String(serviceOrders.length)}
+          </strong>
+          <p>Ordenes visibles para el supervisor en el backend actual.</p>
+        </article>
+
+        <article className='adminMetricCard'>
+          <span className='adminMetricLabel'>Pendientes</span>
+          <strong className='adminMetricValue'>
+            {isLoadingChangeRequests ? '...' : String(pendingChangeRequests.length)}
+          </strong>
+          <p>Solicitudes de cambio que bloquean programacion hasta resolverse.</p>
+        </article>
+
+        <article className='adminMetricCard'>
+          <span className='adminMetricLabel'>Bloqueadas</span>
+          <strong className='adminMetricValue'>
+            {isLoadingServiceOrders
+              ? '...'
+              : String(serviceOrders.filter((serviceOrder) => serviceOrder.status === 'blocked').length)}
+          </strong>
+          <p>Ordenes actualmente detenidas por incidencia.</p>
+        </article>
+      </div>
+
+      <div className='adminToolbar'>
+        <div>
+          <h2>Ordenes de servicio</h2>
+          <p>El supervisor crea, ajusta y desbloquea ordenes desde esta vista.</p>
+        </div>
+
+        <div className='adminToolbarActions'>
+          <button
+            className='buttonSelector'
+            type='button'
+            onClick={() => {
+              setMessage(null);
+              setIsCreateServiceOrderModalOpen(true);
+            }}
+          >
+            Crear orden
+          </button>
+          <button
+            className='buttonSelector'
+            type='button'
+            onClick={() => {
+              void loadServiceOrders();
+              void loadChangeRequests({ clearMessage: false });
+            }}
+          >
+            Recargar
+          </button>
+        </div>
+      </div>
+
+      <div className='adminTableCard'>
+        <div className='adminTableHeader'>
+          <h3>Listado de ordenes</h3>
+          <p className='adminTableMeta'>
+            {isLoadingServiceOrders ? 'Cargando...' : `${serviceOrders.length} registros encontrados`}
+          </p>
+        </div>
+
+        <div className='adminTableWrapper'>
+          <table className='adminTable'>
+            <thead>
+              <tr>
+                <th>Folio</th>
+                <th>Tipo</th>
+                <th>Referencia</th>
+                <th>RFID Program</th>
+                <th>Cantidad</th>
+                <th>Status</th>
+                <th>Ultima actualizacion</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoadingServiceOrders ? (
+                <tr>
+                  <td colSpan={7} className='adminTableEmpty'>
+                    Cargando ordenes de servicio...
+                  </td>
+                </tr>
+              ) : serviceOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className='adminTableEmpty'>
+                    No hay ordenes de servicio registradas.
+                  </td>
+                </tr>
+              ) : (
+                serviceOrders.map((serviceOrder) => (
+                  <tr key={serviceOrder._id}>
+                    <td>{serviceOrder.folio}</td>
+                    <td>{formatServiceOrderReadingMode(serviceOrder.readingMode)}</td>
+                    <td>{formatServiceOrderPrimaryReference(serviceOrder)}</td>
+                    <td>{serviceOrder.rfidProgram?.trim() || 'N/D'}</td>
+                    <td>{serviceOrder.quantity}</td>
+                    <td>
+                      <span
+                        className={`adminBadge ${
+                          serviceOrder.status === 'open' ? 'active' : 'inactive'
+                        }`}
+                      >
+                        {formatServiceOrderStatus(serviceOrder.status)}
+                      </span>
+                    </td>
+                    <td>{formatDate(serviceOrder.updatedAt ?? serviceOrder.createdAt)}</td>
+                    <td>
+                      <div className='adminActionRow'>
+                        <button
+                          className='adminActionButton'
+                          type='button'
+                          onClick={() => {
+                            setMessage(null);
+                            setEditingServiceOrder(serviceOrder);
+                          }}
+                        >
+                          Editar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className='adminTableCard'>
+        <div className='adminTableHeader'>
+          <h3>Solicitudes de cambio pendientes</h3>
+          <p className='adminTableMeta'>
+            {isLoadingChangeRequests ? 'Cargando...' : `${pendingChangeRequests.length} pendientes`}
+          </p>
+        </div>
+
+        <div className='adminTableWrapper'>
+          <table className='adminTable'>
+            <thead>
+              <tr>
+                <th>Folio</th>
+                <th>Motivo</th>
+                <th>Fecha</th>
+                <th>Status</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoadingChangeRequests ? (
+                <tr>
+                  <td colSpan={5} className='adminTableEmpty'>
+                    Cargando solicitudes...
+                  </td>
+                </tr>
+              ) : pendingChangeRequests.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className='adminTableEmpty'>
+                    No hay solicitudes pendientes.
+                  </td>
+                </tr>
+              ) : (
+                pendingChangeRequests.map((changeRequest) => (
+                  <tr key={changeRequest._id}>
+                    <td>{changeRequest.serviceOrderFolio}</td>
+                    <td>{formatChangeRequestType(changeRequest.requestType)}</td>
+                    <td>{formatDate(changeRequest.createdAt)}</td>
+                    <td>
+                      <span className='adminBadge inactive'>Pending</span>
+                    </td>
+                    <td>
+                      <div className='adminActionRow'>
+                        <button
+                          className='adminActionButton'
+                          type='button'
+                          onClick={() => {
+                            setMessage(null);
+                            setResolvingChangeRequest(changeRequest);
+                          }}
+                        >
+                          Resolver
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className='adminTableCard'>
+        <div className='adminTableHeader'>
+          <h3>Historial resuelto</h3>
+          <p className='adminTableMeta'>
+            {isLoadingChangeRequests ? 'Cargando...' : `${resolvedChangeRequests.length} resueltas`}
+          </p>
+        </div>
+
+        <div className='adminTableWrapper'>
+          <table className='adminTable'>
+            <thead>
+              <tr>
+                <th>Folio</th>
+                <th>Motivo</th>
+                <th>Resuelta por</th>
+                <th>Fecha</th>
+                <th>Notas</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoadingChangeRequests ? (
+                <tr>
+                  <td colSpan={5} className='adminTableEmpty'>
+                    Cargando historial...
+                  </td>
+                </tr>
+              ) : resolvedChangeRequests.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className='adminTableEmpty'>
+                    No hay solicitudes resueltas por mostrar.
+                  </td>
+                </tr>
+              ) : (
+                resolvedChangeRequests.map((changeRequest) => (
+                  <tr key={changeRequest._id}>
+                    <td>{changeRequest.serviceOrderFolio}</td>
+                    <td>{formatChangeRequestType(changeRequest.requestType)}</td>
+                    <td>{changeRequest.resolvedByUsername ?? 'N/D'}</td>
+                    <td>{formatDate(changeRequest.resolvedAt ?? changeRequest.updatedAt)}</td>
+                    <td>{changeRequest.resolutionNotes?.trim() || 'Sin notas'}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  );
+
   const renderUsersSection = () => (
     <section className='adminSectionStack'>
       <article className='adminInfoCard'>
@@ -981,10 +1416,7 @@ function AdministrationDashboardPage() {
       case 'rfidProgram':
         return renderRfidProgramsSection();
       case 'serviceOrder':
-        return renderPlaceholderSection(
-          'Orden de servicio',
-          'Este espacio queda listo para agregar vistas o herramientas especificas de ordenes de servicio.',
-        );
+        return renderServiceOrdersSection();
       case 'users':
         return renderUsersSection();
       default:
@@ -1015,7 +1447,7 @@ function AdministrationDashboardPage() {
             <div className='adminSidebarContent'>
               <p className='adminSidebarCaption'>Navegacion</p>
               <nav className='adminSidebarNav' aria-label='Secciones del administrador'>
-                {ADMIN_SECTIONS.map((section) => (
+                {visibleSections.map((section) => (
                   <button
                     key={section.id}
                     className={`adminSidebarNavButton ${
@@ -1114,6 +1546,20 @@ function AdministrationDashboardPage() {
         />
       )}
 
+      {isCreateServiceOrderModalOpen && (
+        <ServiceOrderFormModal
+          title='Crear orden de servicio'
+          submitLabel='Guardar orden'
+          submittingLabel='Guardando...'
+          partConfigs={partConfigs}
+          gtins={gtins}
+          rfidPrograms={rfidPrograms}
+          isCatalogLoading={isLoading || isLoadingGtins || isLoadingRfidPrograms}
+          onClose={() => setIsCreateServiceOrderModalOpen(false)}
+          onSubmit={handleCreateServiceOrder}
+        />
+      )}
+
       {editingPartConfig && (
         <PartConfigFormModal
           title={`Editar ${editingPartConfig.partNumber}`}
@@ -1150,6 +1596,22 @@ function AdministrationDashboardPage() {
         />
       )}
 
+      {editingServiceOrder && (
+        <ServiceOrderFormModal
+          title={`Editar ${editingServiceOrder.folio}`}
+          submitLabel='Guardar cambios'
+          submittingLabel='Actualizando...'
+          partConfigs={partConfigs}
+          gtins={gtins}
+          rfidPrograms={rfidPrograms}
+          isCatalogLoading={isLoading || isLoadingGtins || isLoadingRfidPrograms}
+          initialData={editingServiceOrder}
+          allowStatusSelection
+          onClose={() => setEditingServiceOrder(null)}
+          onSubmit={handleUpdateServiceOrder}
+        />
+      )}
+
       {copyingPartConfig && (
         <PartConfigFormModal
           title={`Copiar ${copyingPartConfig.partNumber}`}
@@ -1162,6 +1624,28 @@ function AdministrationDashboardPage() {
           copySourcePartNumber={copyingPartConfig.partNumber}
           onClose={() => setCopyingPartConfig(null)}
           onSubmit={handleCopyPartConfig}
+        />
+      )}
+
+      {resolvingChangeRequest && (
+        <ServiceOrderChangeRequestResolveModal
+          serviceOrder={
+            serviceOrders.find(
+              (serviceOrder) => serviceOrder._id === resolvingChangeRequest.serviceOrderId,
+            ) ?? {
+              _id: resolvingChangeRequest.serviceOrderId,
+              folio: resolvingChangeRequest.serviceOrderFolio,
+              readingMode: 'manual',
+              partNumber: '',
+              gtin: '',
+              rfidProgram: undefined,
+              quantity: 1,
+              status: 'blocked',
+            }
+          }
+          changeRequest={resolvingChangeRequest}
+          onClose={() => setResolvingChangeRequest(null)}
+          onSubmit={handleResolveChangeRequest}
         />
       )}
 

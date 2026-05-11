@@ -3,6 +3,19 @@ import type { AuthSession, LoginCredentials, RegisterPayload, User } from '../ty
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 const AUTH_STORAGE_KEY = 'conmed-rfid-auth-session';
 
+export const buildAuthHeaders = (headers: Record<string, string> = {}) => {
+  const token = loadAuthSession()?.token;
+
+  if (!token) {
+    return headers;
+  }
+
+  return {
+    ...headers,
+    Authorization: `Bearer ${token}`,
+  };
+};
+
 const getDefaultLoginErrorMessage = (status: number) => {
   switch (status) {
     case 400:
@@ -52,9 +65,9 @@ export async function login(credentials: LoginCredentials): Promise<AuthSession>
 export async function registerUser(payload: RegisterPayload): Promise<User> {
   const response = await fetch(`${API_URL}/api/auth/register`, {
     method: 'POST',
-    headers: {
+    headers: buildAuthHeaders({
       'Content-Type': 'application/json',
-    },
+    }),
     body: JSON.stringify(payload),
   });
 

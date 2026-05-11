@@ -3,11 +3,14 @@ import type {
   RfidProgramMutationPayload,
   RfidProgramMutationResponse,
 } from '../types/RfidProgram';
+import { buildAuthHeaders } from './authService';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
 export async function listRfidPrograms(): Promise<RfidProgram[]> {
-  const response = await fetch(`${API_URL}/api/rfid-programs`);
+  const response = await fetch(`${API_URL}/api/rfid-programs`, {
+    headers: buildAuthHeaders(),
+  });
   const result = (await response.json().catch(() => null)) as
     | { count?: number; data?: RfidProgram[]; message?: string }
     | null;
@@ -24,9 +27,9 @@ export async function createRfidProgram(
 ): Promise<RfidProgramMutationResponse> {
   const response = await fetch(`${API_URL}/api/rfid-programs`, {
     method: 'POST',
-    headers: {
+    headers: buildAuthHeaders({
       'Content-Type': 'application/json',
-    },
+    }),
     body: JSON.stringify(payload),
   });
 
@@ -54,9 +57,9 @@ export async function updateRfidProgram(
 ): Promise<RfidProgramMutationResponse> {
   const response = await fetch(`${API_URL}/api/rfid-programs/${id}`, {
     method: 'PATCH',
-    headers: {
+    headers: buildAuthHeaders({
       'Content-Type': 'application/json',
-    },
+    }),
     body: JSON.stringify(payload),
   });
 
@@ -85,6 +88,7 @@ export async function activateRfidProgram(id: string): Promise<RfidProgramMutati
 export async function deactivateRfidProgram(id: string): Promise<RfidProgramMutationResponse> {
   const response = await fetch(`${API_URL}/api/rfid-programs/${id}`, {
     method: 'DELETE',
+    headers: buildAuthHeaders(),
   });
 
   const result = (await response.json().catch(() => null)) as

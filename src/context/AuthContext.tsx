@@ -8,6 +8,8 @@ type AuthContextValue = {
   token: string | null;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  isSupervisor: boolean;
+  canAccessBackoffice: boolean;
   setAuthSession: (session: AuthSession) => void;
   logout: () => void;
 };
@@ -28,6 +30,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const user = session?.user ?? null;
+  const isAdmin = user?.role === 'admin' && user?.isActive !== false;
+  const isSupervisor = user?.role === 'supervisor' && user?.isActive !== false;
 
   return (
     <AuthContext.Provider
@@ -36,7 +40,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         token: session?.token ?? null,
         isAuthenticated: Boolean(session?.token && user?.isActive !== false),
-        isAdmin: user?.role === 'admin' && user?.isActive !== false,
+        isAdmin,
+        isSupervisor,
+        canAccessBackoffice: isAdmin || isSupervisor,
         setAuthSession: setAuthState,
         logout,
       }}

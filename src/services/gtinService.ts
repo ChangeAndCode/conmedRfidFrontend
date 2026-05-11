@@ -1,9 +1,12 @@
 import type { Gtin, GtinMutationPayload, GtinMutationResponse } from '../types/Gtin';
+import { buildAuthHeaders } from './authService';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
 export async function listGtins(): Promise<Gtin[]> {
-  const response = await fetch(`${API_URL}/api/gtins`);
+  const response = await fetch(`${API_URL}/api/gtins`, {
+    headers: buildAuthHeaders(),
+  });
   const result = (await response.json().catch(() => null)) as
     | { count?: number; data?: Gtin[]; message?: string }
     | null;
@@ -18,9 +21,9 @@ export async function listGtins(): Promise<Gtin[]> {
 export async function createGtin(payload: GtinMutationPayload): Promise<GtinMutationResponse> {
   const response = await fetch(`${API_URL}/api/gtins`, {
     method: 'POST',
-    headers: {
+    headers: buildAuthHeaders({
       'Content-Type': 'application/json',
-    },
+    }),
     body: JSON.stringify(payload),
   });
 
@@ -48,9 +51,9 @@ export async function updateGtin(
 ): Promise<GtinMutationResponse> {
   const response = await fetch(`${API_URL}/api/gtins/${id}`, {
     method: 'PATCH',
-    headers: {
+    headers: buildAuthHeaders({
       'Content-Type': 'application/json',
-    },
+    }),
     body: JSON.stringify(payload),
   });
 
@@ -79,6 +82,7 @@ export async function activateGtin(id: string): Promise<GtinMutationResponse> {
 export async function deactivateGtin(id: string): Promise<GtinMutationResponse> {
   const response = await fetch(`${API_URL}/api/gtins/${id}`, {
     method: 'DELETE',
+    headers: buildAuthHeaders(),
   });
 
   const result = (await response.json().catch(() => null)) as

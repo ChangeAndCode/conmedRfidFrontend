@@ -18,7 +18,7 @@ function HomePage() {
   const [loginFeedbackMessage, setLoginFeedbackMessage] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAdmin, logout, setAuthSession, user } = useAuth();
+  const { canAccessBackoffice, logout, setAuthSession, user } = useAuth();
 
   const redirectPath =
     (location.state as RedirectState | null)?.from?.pathname ?? '/administratorDashboard';
@@ -66,10 +66,10 @@ function HomePage() {
               </div>
             </div>
 
-            {isAdmin ? (
+            {canAccessBackoffice ? (
               <div className='loginRegisterSelection'>
                 <button onClick={() => navigate('/administratorDashboard')} className='buttonSelector'>
-                  Panel Administrador
+                  Panel de Control
                 </button>
                 <button
                   onClick={() => {
@@ -80,7 +80,7 @@ function HomePage() {
                 >
                   {'Cerrar Sesi\u00f3n'}
                 </button>
-                <p className='sessionStatus'>{`Sesi\u00f3n activa: ${user?.username ?? ''}`}</p>
+                <p className='sessionStatus'>{`Sesi\u00f3n activa: ${user?.username ?? ''} (${user?.role ?? ''})`}</p>
               </div>
             ) : (
               <div className='loginRegisterSelection'>

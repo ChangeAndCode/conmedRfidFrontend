@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import '../css/loginModal.css';
 import { registerUser } from '../services/authService';
-import type { RegisterPayload, User } from '../types/Auth';
+import type { RegisterPayload, User, UserRole } from '../types/Auth';
 
 type RegisterModalProps = {
   onClose: () => void;
@@ -16,6 +16,7 @@ const INITIAL_FORM_VALUES: RegisterFormValues = {
   username: '',
   email: '',
   password: '',
+  role: 'supervisor',
   confirmPassword: '',
 };
 
@@ -31,9 +32,10 @@ function RegisterModal({ onClose, onSuccess }: RegisterModalProps) {
     const email = formValues.email.trim();
     const password = formValues.password.trim();
     const confirmPassword = formValues.confirmPassword.trim();
+    const role = formValues.role as UserRole;
 
     if (!username || !email || !password || !confirmPassword) {
-      setErrorMessage('Completa nombre de usuario, correo y contrasena.');
+      setErrorMessage('Completa nombre de usuario, correo, contrasena y rol.');
       return;
     }
 
@@ -55,6 +57,7 @@ function RegisterModal({ onClose, onSuccess }: RegisterModalProps) {
         username,
         email,
         password,
+        role,
       });
 
       onSuccess(user);
@@ -110,6 +113,24 @@ function RegisterModal({ onClose, onSuccess }: RegisterModalProps) {
                 disabled={isSubmitting}
                 required
               />
+            </label>
+
+            <label className='modalField'>
+              <span>Rol</span>
+              <select
+                value={formValues.role}
+                onChange={(event) =>
+                  setFormValues((currentValues) => ({
+                    ...currentValues,
+                    role: event.target.value as UserRole,
+                  }))
+                }
+                disabled={isSubmitting}
+                required
+              >
+                <option value='supervisor'>Supervisor</option>
+                <option value='admin'>Admin</option>
+              </select>
             </label>
 
             <label className='modalField'>

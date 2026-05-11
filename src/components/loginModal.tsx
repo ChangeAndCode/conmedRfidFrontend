@@ -47,8 +47,8 @@ function LoginModal({
         throw new Error('El usuario existe, pero esta inactivo.');
       }
 
-      if (session.user.role !== 'admin') {
-        throw new Error('El usuario no tiene permisos para entrar al panel administrador.');
+      if (session.user.role !== 'admin' && session.user.role !== 'supervisor') {
+        throw new Error('El usuario no tiene permisos para entrar al panel de control.');
       }
 
       onSuccess(session);

@@ -3,11 +3,14 @@ import type {
   PartConfigMutationPayload,
   PartConfigMutationResponse,
 } from '../types/PartConfig';
+import { buildAuthHeaders } from './authService';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
 export async function listPartConfigs(): Promise<PartConfig[]> {
-  const response = await fetch(`${API_URL}/api/part-configs`);
+  const response = await fetch(`${API_URL}/api/part-configs`, {
+    headers: buildAuthHeaders(),
+  });
   const result = (await response.json().catch(() => null)) as
     | { count?: number; data?: PartConfig[]; message?: string }
     | null;
@@ -24,9 +27,9 @@ export async function createPartConfig(
 ): Promise<PartConfigMutationResponse> {
   const response = await fetch(`${API_URL}/api/part-configs`, {
     method: 'POST',
-    headers: {
+    headers: buildAuthHeaders({
       'Content-Type': 'application/json',
-    },
+    }),
     body: JSON.stringify(payload),
   });
 
@@ -54,9 +57,9 @@ export async function updatePartConfig(
 ): Promise<PartConfigMutationResponse> {
   const response = await fetch(`${API_URL}/api/part-configs/${id}`, {
     method: 'PATCH',
-    headers: {
+    headers: buildAuthHeaders({
       'Content-Type': 'application/json',
-    },
+    }),
     body: JSON.stringify(payload),
   });
 
@@ -87,6 +90,7 @@ export async function activatePartConfig(id: string): Promise<PartConfigMutation
 export async function deactivatePartConfig(id: string): Promise<PartConfigMutationResponse> {
   const response = await fetch(`${API_URL}/api/part-configs/${id}`, {
     method: 'DELETE',
+    headers: buildAuthHeaders(),
   });
 
   const result = (await response.json().catch(() => null)) as
@@ -114,6 +118,7 @@ export async function permanentlyDeletePartConfig(
 ): Promise<PartConfigMutationResponse> {
   const response = await fetch(`${API_URL}/api/part-configs/${id}/permanent`, {
     method: 'DELETE',
+    headers: buildAuthHeaders(),
   });
 
   const result = (await response.json().catch(() => null)) as
