@@ -164,11 +164,20 @@ const formatServiceOrderStatus = (status: ServiceOrder['status']) => {
 };
 
 const formatServiceOrderReadingMode = (readingMode: ServiceOrder['readingMode']) => {
-  return readingMode === 'manual' ? 'Manual' : 'Doble codigo';
+  switch (readingMode) {
+    case 'manual':
+      return 'Manual';
+    case 'single_scan':
+      return 'Single Scan';
+    case 'double_scan':
+      return 'Doble codigo';
+    default:
+      return readingMode;
+  }
 };
 
 const formatServiceOrderPrimaryReference = (serviceOrder: ServiceOrder) => {
-  if (serviceOrder.readingMode === 'manual') {
+  if (serviceOrder.readingMode === 'manual' || serviceOrder.readingMode === 'single_scan') {
     return serviceOrder.partNumber?.trim() || 'Sin numero de parte';
   }
 

@@ -120,9 +120,12 @@ export async function updateServiceOrder(
   };
 }
 
-export async function listOpenServiceOrdersByGtin(gtin: string): Promise<ServiceOrder[]> {
+export async function listOpenServiceOrdersByGtin(
+  gtin: string,
+  readingMode: Extract<ReadingMode, 'single_scan' | 'double_scan'> = 'double_scan',
+): Promise<ServiceOrder[]> {
   const response = await fetch(
-    `${API_URL}/api/service-orders/resolve-by-gtin${buildQueryString({ gtin })}`,
+    `${API_URL}/api/service-orders/resolve-by-gtin${buildQueryString({ gtin, readingMode })}`,
   );
 
   const result = (await response.json().catch(() => null)) as
@@ -136,9 +139,12 @@ export async function listOpenServiceOrdersByGtin(gtin: string): Promise<Service
   return result?.data ?? [];
 }
 
-export async function listOpenServiceOrdersByPartNumber(partNumber: string): Promise<ServiceOrder[]> {
+export async function listOpenServiceOrdersByPartNumber(
+  partNumber: string,
+  readingMode: Extract<ReadingMode, 'manual' | 'single_scan'> = 'manual',
+): Promise<ServiceOrder[]> {
   const response = await fetch(
-    `${API_URL}/api/service-orders/resolve-by-part-number${buildQueryString({ partNumber })}`,
+    `${API_URL}/api/service-orders/resolve-by-part-number${buildQueryString({ partNumber, readingMode })}`,
   );
 
   const result = (await response.json().catch(() => null)) as
@@ -170,7 +176,7 @@ export async function listOpenManualServiceOrders(partNumber?: string): Promise<
 
 export async function listServiceOrderPartConfigOptions(
   id: string,
-  readingMode: Extract<ReadingMode, 'manual' | 'double_scan'>,
+  readingMode: Extract<ReadingMode, 'manual' | 'single_scan' | 'double_scan'>,
 ): Promise<ServiceOrderPartConfigOption[]> {
   const response = await fetch(
     `${API_URL}/api/service-orders/${id}/part-config-options${buildQueryString({

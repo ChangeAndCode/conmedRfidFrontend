@@ -72,6 +72,7 @@ function PartConfigFormModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isDoubleScan = values.readingMode === 'double_scan';
+  const isSingleScan = values.readingMode === 'single_scan';
   const isCopyMode = Boolean(copySourcePartNumber);
   const activeGtins = gtins.filter((gtin) => gtin.isActive);
   const activeRfidPrograms = rfidPrograms.filter((rfidProgram) => rfidProgram.isActive);
@@ -136,6 +137,13 @@ function PartConfigFormModal({
         );
         return;
       }
+    }
+
+    if (isSingleScan && !rawExpectedGtin) {
+      setErrorMessage(
+        'Para single scan es obligatorio Expected GTIN para poder resolver la orden desde el escaneo.',
+      );
+      return;
     }
 
     if (isCatalogLoading) {
@@ -359,7 +367,9 @@ function PartConfigFormModal({
               ? 'Los demas campos quedan bloqueados para clonar la configuracion actual y cambiar solo el numero de parte, el GTIN o el RFID Program.'
               : isDoubleScan
               ? 'En doble lectura son obligatorios RFID Program, Expected GTIN y Expected Lot Length. Ambos deben existir activos en catalogo.'
-              : 'Para manual o single scan, los campos tecnicos son opcionales. Si capturas GTIN o RFID Program, deben existir activos en catalogo.'}
+              : isSingleScan
+              ? 'En single scan es obligatorio Expected GTIN para poder resolver la orden con el escaneo. Si capturas RFID Program, tambien debe existir activo en catalogo.'
+              : 'Para manual, los campos tecnicos son opcionales. Si capturas GTIN o RFID Program, deben existir activos en catalogo.'}
           </p>
 
           {(showUnavailableExpectedGtin || showUnavailableRfidProgram) && (

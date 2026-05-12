@@ -3,7 +3,7 @@ import type { ReadingMode } from './PartConfig';
 export type ServiceOrderStatus = 'open' | 'blocked' | 'closed';
 export type ServiceOrderChangeRequestType = 'missing_product' | 'extra_product';
 export type ServiceOrderChangeRequestStatus = 'pending' | 'resolved';
-export type ServiceOrderReadingMode = Extract<ReadingMode, 'manual' | 'double_scan'>;
+export type ServiceOrderReadingMode = Extract<ReadingMode, 'manual' | 'single_scan' | 'double_scan'>;
 
 export interface ServiceOrder {
   _id: string;

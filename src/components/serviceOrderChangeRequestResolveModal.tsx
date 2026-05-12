@@ -59,7 +59,8 @@ function ServiceOrderChangeRequestResolveModal({
   });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const isManualOrder = values.readingMode === 'manual';
+  const isPartNumberBasedOrder =
+    values.readingMode === 'manual' || values.readingMode === 'single_scan';
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -78,9 +79,11 @@ function ServiceOrderChangeRequestResolveModal({
       return;
     }
 
-    if (readingMode === 'manual') {
+    if (readingMode === 'manual' || readingMode === 'single_scan') {
       if (!partNumber) {
-        setErrorMessage('Completa el numero de parte para la orden manual.');
+        setErrorMessage(
+          `Completa el numero de parte para la orden ${readingMode === 'single_scan' ? 'single scan' : 'manual'}.`,
+        );
         return;
       }
     } else {
@@ -107,7 +110,7 @@ function ServiceOrderChangeRequestResolveModal({
       await onSubmit({
         folio,
         readingMode,
-        partNumber: readingMode === 'manual' ? partNumber : undefined,
+        partNumber: readingMode === 'manual' || readingMode === 'single_scan' ? partNumber : undefined,
         gtin: readingMode === 'double_scan' ? gtin : undefined,
         rfidProgram: readingMode === 'double_scan' ? rfidProgram : undefined,
         quantity: parsedQuantity,
@@ -164,7 +167,10 @@ function ServiceOrderChangeRequestResolveModal({
                   setValues((currentValues) => ({
                     ...currentValues,
                     readingMode: nextReadingMode,
-                    partNumber: nextReadingMode === 'manual' ? currentValues.partNumber : '',
+                    partNumber:
+                      nextReadingMode === 'manual' || nextReadingMode === 'single_scan'
+                        ? currentValues.partNumber
+                        : '',
                     gtin: nextReadingMode === 'double_scan' ? currentValues.gtin : '',
                     rfidProgram: nextReadingMode === 'double_scan' ? currentValues.rfidProgram : '',
                   }));
@@ -172,11 +178,12 @@ function ServiceOrderChangeRequestResolveModal({
                 disabled={isSubmitting}
               >
                 <option value='manual'>Manual</option>
+                <option value='single_scan'>Single Scan</option>
                 <option value='double_scan'>Doble codigo</option>
               </select>
             </label>
 
-            {isManualOrder ? (
+            {isPartNumberBasedOrder ? (
               <label className='adminField'>
                 <span>Numero de parte</span>
                 <input

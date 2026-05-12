@@ -74,20 +74,26 @@ function ServiceOrderFormModal({
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const activeManualPartConfigs = partConfigs.filter(
-    (partConfig) => partConfig.isActive && partConfig.readingMode === 'manual',
+  const isPartNumberBasedOrder =
+    values.readingMode === 'manual' || values.readingMode === 'single_scan';
+  const activePartNumberConfigs = partConfigs.filter(
+    (partConfig) =>
+      partConfig.isActive &&
+      partConfig.readingMode === values.readingMode &&
+      (values.readingMode !== 'single_scan' || Boolean(partConfig.expectedGtin?.trim())),
   );
   const activeGtins = gtins.filter((gtin) => gtin.isActive);
   const activeRfidPrograms = rfidPrograms.filter((rfidProgram) => rfidProgram.isActive);
   const showUnavailablePartNumber =
     values.partNumber.trim().length > 0 &&
-    !activeManualPartConfigs.some((partConfig) => partConfig.partNumber === values.partNumber);
+    !activePartNumberConfigs.some((partConfig) => partConfig.partNumber === values.partNumber);
   const showUnavailableExpectedGtin =
     values.gtin.trim().length > 0 && !activeGtins.some((gtin) => gtin.value === values.gtin);
   const showUnavailableRfidProgram =
     values.rfidProgram.trim().length > 0 &&
     !activeRfidPrograms.some((rfidProgram) => rfidProgram.value === values.rfidProgram);
-  const isManualOrder = values.readingMode === 'manual';
+  const partNumberOrderLabel =
+    values.readingMode === 'single_scan' ? 'single scan con Expected GTIN' : 'manual';
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -105,16 +111,20 @@ function ServiceOrderFormModal({
       return;
     }
 
-    if (readingMode === 'manual') {
+    if (readingMode === 'manual' || readingMode === 'single_scan') {
       if (!partNumber) {
-        setErrorMessage('Selecciona un numero de parte manual.');
+        setErrorMessage(
+          `Selecciona un numero de parte ${readingMode === 'single_scan' ? 'single scan' : 'manual'}.`,
+        );
         return;
       }
 
       if (
-        !activeManualPartConfigs.some((partConfig) => partConfig.partNumber === partNumber)
+        !activePartNumberConfigs.some((partConfig) => partConfig.partNumber === partNumber)
       ) {
-        setErrorMessage('Selecciona un numero de parte manual activo.');
+        setErrorMessage(
+          `Selecciona un numero de parte ${readingMode === 'single_scan' ? 'single scan activo con Expected GTIN' : 'manual activo'}.`,
+        );
         return;
       }
     } else {
@@ -155,7 +165,7 @@ function ServiceOrderFormModal({
       await onSubmit({
         folio,
         readingMode,
-        partNumber: readingMode === 'manual' ? partNumber : undefined,
+        partNumber: readingMode === 'manual' || readingMode === 'single_scan' ? partNumber : undefined,
         gtin: readingMode === 'double_scan' ? gtin : undefined,
         rfidProgram: readingMode === 'double_scan' ? rfidProgram : undefined,
         quantity: parsedQuantity,
@@ -178,8 +188,8 @@ function ServiceOrderFormModal({
           <div className='adminModalTitleBlock'>
             <h2>{title}</h2>
             <p>
-              Define si la orden es manual o de doble codigo. Para manual se usa numero de parte;
-              para doble codigo se usa GTIN y RFID Program.
+              Define si la orden es manual, single scan o de doble codigo. Manual y single scan usan
+              numero de parte; doble codigo usa GTIN y RFID Program.
             </p>
           </div>
           <button className='buttonSelector' type='button' onClick={onClose} disabled={isSubmitting}>
@@ -215,7 +225,10 @@ function ServiceOrderFormModal({
                   setValues((currentValues) => ({
                     ...currentValues,
                     readingMode: nextReadingMode,
-                    partNumber: nextReadingMode === 'manual' ? currentValues.partNumber : '',
+                    partNumber:
+                      nextReadingMode === 'manual' || nextReadingMode === 'single_scan'
+                        ? currentValues.partNumber
+                        : '',
                     gtin: nextReadingMode === 'double_scan' ? currentValues.gtin : '',
                     rfidProgram: nextReadingMode === 'double_scan' ? currentValues.rfidProgram : '',
                   }));
@@ -223,11 +236,12 @@ function ServiceOrderFormModal({
                 disabled={isSubmitting}
               >
                 <option value='manual'>Manual</option>
+                <option value='single_scan'>Single Scan</option>
                 <option value='double_scan'>Doble codigo</option>
               </select>
             </label>
 
-            {isManualOrder ? (
+            {isPartNumberBasedOrder ? (
               <label className='adminField'>
                 <span>Numero de parte</span>
                 <select
@@ -240,14 +254,14 @@ function ServiceOrderFormModal({
                   }
                   disabled={isSubmitting || isCatalogLoading}
                   required
-                >
+                  >
                   <option value=''>Selecciona un numero de parte</option>
                   {showUnavailablePartNumber && (
                     <option value={values.partNumber}>
                       {`${values.partNumber} (inactivo o no disponible)`}
                     </option>
                   )}
-                  {activeManualPartConfigs.map((partConfig) => (
+                  {activePartNumberConfigs.map((partConfig) => (
                     <option key={partConfig._id} value={partConfig.partNumber}>
                       {partConfig.partNumber}
                     </option>
@@ -368,8 +382,9 @@ function ServiceOrderFormModal({
           </div>
 
           <p className='adminFieldHint'>
-            Las ordenes manuales se amarran a un numero de parte. Las de doble codigo se amarran a
-            GTIN y RFID Program. El lote ya no forma parte de la orden.
+            Las ordenes manuales se amarran a un numero de parte. Las de single scan requieren un
+            numero de parte con Expected GTIN. Las de doble codigo se amarran a GTIN y RFID Program.
+            El lote ya no forma parte de la orden.
           </p>
 
           {(showUnavailablePartNumber || showUnavailableExpectedGtin || showUnavailableRfidProgram) && (
@@ -379,14 +394,14 @@ function ServiceOrderFormModal({
             </div>
           )}
 
-          {!isCatalogLoading && isManualOrder && activeManualPartConfigs.length === 0 && (
+          {!isCatalogLoading && isPartNumberBasedOrder && activePartNumberConfigs.length === 0 && (
             <div className='adminMessage info'>
-              No hay numeros de parte manuales disponibles para crear esta orden.
+              {`No hay numeros de parte ${partNumberOrderLabel} disponibles para crear esta orden.`}
             </div>
           )}
 
           {!isCatalogLoading &&
-            !isManualOrder &&
+            !isPartNumberBasedOrder &&
             (activeGtins.length === 0 || activeRfidPrograms.length === 0) && (
               <div className='adminMessage info'>
                 No hay catalogos suficientes para crear una orden de doble codigo.
