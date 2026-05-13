@@ -5,6 +5,7 @@ import AppSceneLayout from '../../components/appSceneLayout';
 import ConfirmActionModal from '../../components/confirmActionModal';
 import GtinFormModal from '../../components/gtinFormModal';
 import PartConfigFormModal from '../../components/partConfigFormModal';
+import ProgrammingRecordsQuickReference from '../../components/programmingRecordsQuickReference';
 import RegisterModal from '../../components/registerModal';
 import RfidProgramFormModal from '../../components/rfidProgramFormModal';
 import ServiceOrderChangeRequestResolveModal from '../../components/serviceOrderChangeRequestResolveModal';
@@ -40,8 +41,10 @@ import {
   resolveServiceOrderChangeRequest,
   updateServiceOrder,
 } from '../../services/serviceOrderService';
+import { listProgrammingRecords as listProgrammingRecordsService } from '../../services/programmingRecordService';
 import type { Gtin, GtinMutationPayload } from '../../types/Gtin';
 import type { PartConfig, PartConfigMutationPayload } from '../../types/PartConfig';
+import type { ProgrammingRecord } from '../../types/ProgrammingRecord';
 import type { RfidProgram, RfidProgramMutationPayload } from '../../types/RfidProgram';
 import type {
   ResolveServiceOrderChangeRequestPayload,
@@ -219,8 +222,11 @@ function AdministrationDashboardPage() {
   const [copyingPartConfig, setCopyingPartConfig] = useState<PartConfig | null>(null);
   const [serviceOrders, setServiceOrders] = useState<ServiceOrder[]>([]);
   const [changeRequests, setChangeRequests] = useState<ServiceOrderChangeRequest[]>([]);
+  const [programmedRecords, setProgrammedRecords] = useState<ProgrammingRecord[]>([]);
+  const [verifiedRecords, setVerifiedRecords] = useState<ProgrammingRecord[]>([]);
   const [isLoadingServiceOrders, setIsLoadingServiceOrders] = useState(false);
   const [isLoadingChangeRequests, setIsLoadingChangeRequests] = useState(false);
+  const [isLoadingProgrammingRecords, setIsLoadingProgrammingRecords] = useState(false);
   const [isCreateServiceOrderModalOpen, setIsCreateServiceOrderModalOpen] = useState(false);
   const [editingServiceOrder, setEditingServiceOrder] = useState<ServiceOrder | null>(null);
   const [resolvingChangeRequest, setResolvingChangeRequest] =
@@ -240,7 +246,6 @@ function AdministrationDashboardPage() {
   const inactivePartConfigsCount = partConfigs.length - activePartConfigsCount;
   const pendingChangeRequests = changeRequests.filter((request) => request.status === 'pending');
   const resolvedChangeRequests = changeRequests.filter((request) => request.status === 'resolved');
-
   const loadPartConfigs = async (options?: { clearMessage?: boolean; suppressErrorMessage?: boolean }) => {
     setIsLoading(true);
 
@@ -377,6 +382,43 @@ function AdministrationDashboardPage() {
     }
   };
 
+  const loadProgrammingRecords = async (options?: {
+    clearMessage?: boolean;
+    suppressErrorMessage?: boolean;
+  }) => {
+    setIsLoadingProgrammingRecords(true);
+
+    if (options?.clearMessage ?? true) {
+      setMessage(null);
+    }
+
+    try {
+      const [nextProgrammedRecords, nextVerifiedRecords] = await Promise.all([
+        listProgrammingRecordsService({ status: 'programmed' }),
+        listProgrammingRecordsService({ status: 'verified' }),
+      ]);
+
+      setProgrammedRecords(nextProgrammedRecords);
+      setVerifiedRecords(nextVerifiedRecords);
+      return true;
+    } catch (error) {
+      setProgrammedRecords([]);
+      setVerifiedRecords([]);
+      if (!(options?.suppressErrorMessage ?? false)) {
+        setMessage({
+          type: 'error',
+          text:
+            error instanceof Error
+              ? error.message
+              : 'No se pudieron cargar los programming records de referencia.',
+        });
+      }
+      return false;
+    } finally {
+      setIsLoadingProgrammingRecords(false);
+    }
+  };
+
   useEffect(() => {
     if (isSupervisor) {
       void loadPartConfigs({ clearMessage: false, suppressErrorMessage: true });
@@ -391,6 +433,7 @@ function AdministrationDashboardPage() {
       void loadPartConfigs();
       void loadGtins({ clearMessage: false });
       void loadRfidPrograms({ clearMessage: false });
+      void loadProgrammingRecords({ clearMessage: false });
     }
   }, [isAdmin, isSupervisor]);
 
@@ -752,6 +795,12 @@ function AdministrationDashboardPage() {
           </div>
         </div>
       </article>
+
+      <ProgrammingRecordsQuickReference
+        programmedRecords={programmedRecords}
+        verifiedRecords={verifiedRecords}
+        isLoading={isLoadingProgrammingRecords}
+      />
     </section>
   );
 

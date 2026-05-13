@@ -4,7 +4,6 @@ import AppSceneLayout from '../../components/appSceneLayout';
 import { useAuth } from '../../context/useAuth';
 import '../../css/verificationDashboard.css';
 import {
-  listProgrammingRecords,
   resolveProgrammingRecord,
   verifyProgrammingRecord,
 } from '../../services/programmingRecordService';
@@ -131,9 +130,6 @@ function ValidationDashboardPage() {
   const [message, setMessage] = useState<FeedbackMessage | null>(null);
   const [resolution, setResolution] = useState<ResolveProgrammingRecordResult | null>(null);
   const [selectedProgrammingRecordId, setSelectedProgrammingRecordId] = useState<string | null>(null);
-  const [programmedRecords, setProgrammedRecords] = useState<ProgrammingRecord[]>([]);
-  const [verifiedRecords, setVerifiedRecords] = useState<ProgrammingRecord[]>([]);
-  const [isLoadingBoards, setIsLoadingBoards] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
 
@@ -158,42 +154,6 @@ function ValidationDashboardPage() {
       verificationNotes: currentValues.verificationNotes,
     }));
   };
-
-  const loadBoardRecords = async (options?: { keepMessage?: boolean }) => {
-    setIsLoadingBoards(true);
-
-    if (!(options?.keepMessage ?? false)) {
-      setMessage(null);
-    }
-
-    try {
-      const [nextProgrammedRecords, nextVerifiedRecords] = await Promise.all([
-        listProgrammingRecords({ status: 'programmed' }),
-        listProgrammingRecords({ status: 'verified' }),
-      ]);
-
-      setProgrammedRecords(nextProgrammedRecords);
-      setVerifiedRecords(nextVerifiedRecords);
-      return true;
-    } catch (error) {
-      setProgrammedRecords([]);
-      setVerifiedRecords([]);
-      setMessage({
-        type: 'error',
-        text:
-          error instanceof Error
-            ? error.message
-            : 'No se pudieron cargar los programming records de referencia.',
-      });
-      return false;
-    } finally {
-      setIsLoadingBoards(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadBoardRecords({ keepMessage: true });
-  }, []);
 
   useEffect(() => {
     setFormValues((currentValues) => {
@@ -371,7 +331,6 @@ function ValidationDashboardPage() {
       });
 
       setSelectedProgrammingRecordId(result.data._id);
-      await loadBoardRecords({ keepMessage: true });
       setMessage({
         type: 'success',
         text: result.message,
@@ -410,14 +369,6 @@ function ValidationDashboardPage() {
             </div>
 
             <div className='verificationHeroActions'>
-              <button
-                className='buttonSelector verificationActionButton'
-                type='button'
-                onClick={() => void loadBoardRecords()}
-                disabled={isLoadingBoards}
-              >
-                {isLoadingBoards ? 'Actualizando...' : 'Recargar listas'}
-              </button>
               <button
                 className='buttonSelector verificationActionButton'
                 type='button'
@@ -579,82 +530,6 @@ function ValidationDashboardPage() {
                 >
                   Limpiar
                 </button>
-              </div>
-            </article>
-
-            <article className='verificationPanelCard'>
-              <div className='verificationPanelHeader'>
-                <div>
-                  <h2>Referencia rapida</h2>
-                  <p>Consulta los programming records recientes con status `programmed` y `verified`.</p>
-                </div>
-              </div>
-
-              <div className='verificationMetricsGrid'>
-                <div className='verificationMetricCard'>
-                  <span>Programmed</span>
-                  <strong>{isLoadingBoards ? '...' : programmedRecords.length}</strong>
-                </div>
-                <div className='verificationMetricCard'>
-                  <span>Verified</span>
-                  <strong>{isLoadingBoards ? '...' : verifiedRecords.length}</strong>
-                </div>
-                <div className='verificationMetricCard'>
-                  <span>Operador</span>
-                  <strong>{formValues.verifiedBy.trim() || 'N/D'}</strong>
-                </div>
-              </div>
-
-              <div className='verificationRecordColumns'>
-                <div className='verificationRecordListCard'>
-                  <div className='verificationMiniHeader'>
-                    <h3>Programmed</h3>
-                    <span>{isLoadingBoards ? 'Cargando...' : programmedRecords.length}</span>
-                  </div>
-
-                  <div className='verificationCompactList'>
-                    {programmedRecords.length === 0 ? (
-                      <p className='verificationEmptyState'>
-                        {isLoadingBoards
-                          ? 'Cargando lista...'
-                          : 'No hay programming records programmed por mostrar.'}
-                      </p>
-                    ) : (
-                      programmedRecords.slice(0, 6).map((record) => (
-                        <div key={record._id} className='verificationCompactItem'>
-                          <strong>{record.serviceOrderFolio || record.partNumber}</strong>
-                          <span>{`${formatModeLabel(record.mode)} | ${record.partNumber}`}</span>
-                          <small>{`${record.gtin || 'Sin GTIN'} | ${record.lot || 'Sin lote'}`}</small>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                <div className='verificationRecordListCard'>
-                  <div className='verificationMiniHeader'>
-                    <h3>Verified</h3>
-                    <span>{isLoadingBoards ? 'Cargando...' : verifiedRecords.length}</span>
-                  </div>
-
-                  <div className='verificationCompactList'>
-                    {verifiedRecords.length === 0 ? (
-                      <p className='verificationEmptyState'>
-                        {isLoadingBoards
-                          ? 'Cargando lista...'
-                          : 'No hay programming records verified por mostrar.'}
-                      </p>
-                    ) : (
-                      verifiedRecords.slice(0, 6).map((record) => (
-                        <div key={record._id} className='verificationCompactItem'>
-                          <strong>{record.serviceOrderFolio || record.partNumber}</strong>
-                          <span>{`${formatModeLabel(record.mode)} | ${record.partNumber}`}</span>
-                          <small>{`${formatDateTime(record.verifiedAt)} | ${record.verifiedBy || 'Sin usuario'}`}</small>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
               </div>
             </article>
           </div>
