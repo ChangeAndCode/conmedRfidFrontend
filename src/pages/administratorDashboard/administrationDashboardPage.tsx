@@ -10,7 +10,7 @@ import RfidProgramFormModal from '../../components/rfidProgramFormModal';
 import ServiceOrderChangeRequestResolveModal from '../../components/serviceOrderChangeRequestResolveModal';
 import ServiceOrderFormModal from '../../components/serviceOrderFormModal';
 import '../../css/administratorDashboard.css';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 import {
   activateGtin,
   createGtin,

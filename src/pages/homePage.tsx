@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import AppSceneLayout from '../components/appSceneLayout';
 import LoginModal from '../components/loginModal';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import '../css/homePage.css';
 import type { AuthSession } from '../types/Auth';
 

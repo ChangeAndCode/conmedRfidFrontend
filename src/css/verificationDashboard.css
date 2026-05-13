@@ -1,33 +1,464 @@
-.square.verificationDashboardShell{
-    position: relative;
-    z-index: 2;
-    width: min(720px, calc(100vw - 48px));
-    min-height: 420px;
-    height: auto;
-    background-color: rgba(244, 247, 251, 0.76);
-    border: 1px solid rgba(255, 255, 255, 0.22);
-    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
-    backdrop-filter: blur(18px);
+.square.verificationDashboardShell {
+  position: relative;
+  z-index: 2;
+  width: min(1220px, calc(100vw - 40px));
+  min-height: 720px;
+  height: auto;
+  padding: 28px;
+  background:
+    linear-gradient(155deg, rgba(244, 247, 251, 0.92), rgba(225, 234, 246, 0.82)),
+    rgba(244, 247, 251, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(18px);
 }
 
-.verificationDashboardCard{
+.verificationDashboardCard {
+  width: 100%;
+  display: grid;
+  gap: 20px;
+  color: #10243e;
+}
+
+.verificationHeroCard,
+.verificationPanelCard,
+.verificationMetricCard,
+.verificationRecordListCard,
+.verificationNormalizedInputCard,
+.verificationSelectedRecordCard {
+  border-radius: 22px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.88), rgba(234, 240, 248, 0.92));
+  border: 1px solid rgba(16, 36, 62, 0.1);
+  box-shadow: 0 18px 34px rgba(8, 24, 46, 0.08);
+}
+
+.verificationHeroCard,
+.verificationPanelCard {
+  padding: 22px;
+}
+
+.verificationHeroCard {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.verificationHeroCopy {
+  display: grid;
+  gap: 10px;
+}
+
+.verificationEyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #1d5ca5;
+}
+
+.verificationHeroCopy h1 {
+  font-size: clamp(28px, 3.4vw, 44px);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+
+.verificationHeroCopy p:last-child {
+  max-width: 720px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: rgba(16, 36, 62, 0.8);
+}
+
+.verificationHeroActions,
+.verificationActionRow,
+.verificationModeSelector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.verificationMainGrid,
+.verificationBottomGrid {
+  display: grid;
+  gap: 20px;
+}
+
+.verificationMainGrid {
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+}
+
+.verificationBottomGrid {
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+}
+
+.verificationPanelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.verificationPanelHeader h2,
+.verificationNormalizedInputCard h3,
+.verificationMiniHeader h3,
+.verificationSelectedRecordCard h3 {
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.verificationPanelHeader p,
+.verificationNormalizedInputCard p,
+.verificationSelectedRecordCard p {
+  color: rgba(16, 36, 62, 0.76);
+  line-height: 1.5;
+}
+
+.verificationMessage,
+.verificationHint,
+.verificationEmptyState {
+  border-radius: 16px;
+  padding: 14px 16px;
+  line-height: 1.5;
+}
+
+.verificationMessage {
+  border: 1px solid transparent;
+}
+
+.verificationMessage.success {
+  background-color: #dff3e3;
+  border-color: rgba(24, 91, 45, 0.15);
+  color: #185b2d;
+}
+
+.verificationMessage.info {
+  background-color: #e7f1ff;
+  border-color: rgba(31, 79, 141, 0.16);
+  color: #1f4f8d;
+}
+
+.verificationMessage.error {
+  background-color: #f8dfdf;
+  border-color: rgba(139, 30, 30, 0.16);
+  color: #8b1e1e;
+}
+
+.verificationHint,
+.verificationEmptyState {
+  background-color: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(16, 36, 62, 0.08);
+  color: rgba(16, 36, 62, 0.76);
+}
+
+.verificationModeButton,
+.verificationActionButton,
+.verificationTableSelectButton {
+  width: auto;
+  min-width: 156px;
+  height: 42px;
+  padding: 0 16px;
+  border-width: 2px;
+  border-color: rgba(16, 36, 62, 0.18);
+  background-color: rgba(255, 255, 255, 0.78);
+  color: #10243e;
+  font-weight: 700;
+  box-shadow: 0 10px 24px rgba(10, 28, 52, 0.1);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background-color 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.verificationModeButton:hover,
+.verificationActionButton:hover,
+.verificationTableSelectButton:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(10, 28, 52, 0.14);
+}
+
+.verificationModeButton.active {
+  border-color: #1d5ca5;
+  background: linear-gradient(135deg, rgba(29, 92, 165, 0.12), rgba(75, 174, 215, 0.16));
+  color: #0f417c;
+}
+
+.verificationActionButton:disabled,
+.verificationModeButton:disabled,
+.verificationTableSelectButton:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.verificationFormGrid,
+.verificationMetricsGrid,
+.verificationSummaryGrid,
+.verificationKeyValueGrid,
+.verificationRecordColumns {
+  display: grid;
+  gap: 14px;
+}
+
+.verificationFormGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.verificationField {
+  display: grid;
+  gap: 8px;
+}
+
+.verificationField span,
+.verificationSummaryItem span,
+.verificationKeyValueGrid span,
+.verificationMetricCard span,
+.verificationMiniHeader span {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(16, 36, 62, 0.64);
+}
+
+.verificationField input,
+.verificationField textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1px solid rgba(16, 36, 62, 0.16);
+  border-radius: 14px;
+  background-color: rgba(255, 255, 255, 0.86);
+  color: #10243e;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.verificationField textarea {
+  resize: vertical;
+  min-height: 92px;
+}
+
+.verificationFieldFull,
+.verificationKeyValueFull {
+  grid-column: 1 / -1;
+}
+
+.verificationMetricsGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 16px;
+}
+
+.verificationMetricCard {
+  padding: 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.verificationMetricCard strong {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.verificationRecordColumns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.verificationRecordListCard {
+  padding: 16px;
+  min-height: 260px;
+}
+
+.verificationMiniHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  margin-bottom: 14px;
+}
+
+.verificationCompactList {
+  display: grid;
+  gap: 10px;
+}
+
+.verificationCompactItem {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 14px;
+  background-color: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(16, 36, 62, 0.08);
+}
+
+.verificationCompactItem strong {
+  font-size: 14px;
+}
+
+.verificationCompactItem span,
+.verificationCompactItem small {
+  color: rgba(16, 36, 62, 0.72);
+}
+
+.verificationResolutionStack {
+  display: grid;
+  gap: 16px;
+}
+
+.verificationSummaryGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.verificationSummaryItem,
+.verificationSelectedRecordHeader {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background-color: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(16, 36, 62, 0.08);
+}
+
+.verificationSummaryItem {
+  display: grid;
+  gap: 6px;
+}
+
+.verificationSummaryItem strong {
+  font-size: 16px;
+}
+
+.verificationNormalizedInputCard,
+.verificationSelectedRecordCard {
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.verificationKeyValueGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.verificationKeyValueGrid div {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background-color: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(16, 36, 62, 0.08);
+}
+
+.verificationKeyValueGrid strong {
+  font-size: 14px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.verificationTableWrapper {
+  overflow-x: auto;
+}
+
+.verificationTable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 720px;
+}
+
+.verificationTable th,
+.verificationTable td {
+  padding: 12px 10px;
+  border-bottom: 1px solid rgba(16, 36, 62, 0.1);
+  text-align: left;
+  vertical-align: middle;
+  font-size: 14px;
+}
+
+.verificationTable th {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(16, 36, 62, 0.64);
+}
+
+.verificationTableEmpty {
+  color: rgba(16, 36, 62, 0.72);
+}
+
+.verificationTableRowSelected {
+  background-color: rgba(29, 92, 165, 0.08);
+}
+
+.verificationTableSelectButton {
+  min-width: 100px;
+  height: 36px;
+  padding: 0 12px;
+}
+
+.verificationSelectedRecordHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.verificationStatusBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 92px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.verificationStatusBadge.programmed {
+  background-color: #e7f1ff;
+  color: #1f4f8d;
+}
+
+.verificationStatusBadge.verified {
+  background-color: #dff3e3;
+  color: #185b2d;
+}
+
+@media (max-width: 1024px) {
+  .verificationMainGrid,
+  .verificationBottomGrid,
+  .verificationRecordColumns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .square.verificationDashboardShell {
+    width: min(100vw, calc(100vw - 24px));
+    min-height: 0;
+    padding: 18px;
+  }
+
+  .verificationHeroCard,
+  .verificationPanelCard {
+    padding: 18px;
+  }
+
+  .verificationHeroCard {
+    flex-direction: column;
+  }
+
+  .verificationFormGrid,
+  .verificationMetricsGrid,
+  .verificationSummaryGrid,
+  .verificationKeyValueGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .verificationActionButton,
+  .verificationModeButton {
+    min-width: 0;
     width: 100%;
-    display: grid;
-    gap: 18px;
-    text-align: center;
-    color: #10243e;
-}
-
-.verificationDashboardCard p{
-    font-size: 16px;
-    line-height: 1.5;
-    color: rgba(16, 36, 62, 0.82);
-}
-
-@media (max-width: 768px){
-    .square.verificationDashboardShell{
-        width: min(100vw, calc(100vw - 28px));
-        min-height: 0;
-        padding: 32px 24px;
-    }
+  }
 }

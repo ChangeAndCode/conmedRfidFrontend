@@ -1,20 +1,7 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { AuthContext } from './authContext';
 import { clearAuthSession, loadAuthSession, saveAuthSession } from '../services/authService';
-import type { AuthSession, User } from '../types/Auth';
-
-type AuthContextValue = {
-  session: AuthSession | null;
-  user: User | null;
-  token: string | null;
-  isAuthenticated: boolean;
-  isAdmin: boolean;
-  isSupervisor: boolean;
-  canAccessBackoffice: boolean;
-  setAuthSession: (session: AuthSession) => void;
-  logout: () => void;
-};
-
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+import type { AuthSession } from '../types/Auth';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(() => loadAuthSession());
@@ -50,14 +37,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-
-  if (!context) {
-    throw new Error('useAuth debe usarse dentro de AuthProvider.');
-  }
-
-  return context;
 }
