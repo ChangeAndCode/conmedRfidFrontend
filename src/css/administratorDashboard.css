@@ -337,7 +337,7 @@
 .adminTable {
     width: 100%;
     border-collapse: collapse;
-    min-width: 1120px;
+    table-layout: fixed;
 }
 
 .adminTable th,
@@ -609,4 +609,112 @@
     .adminModalCard {
         padding: 22px 18px;
     }
+}
+
+/* =========================================
+   Table Action Icon Styles
+========================================= */
+
+.adminIconActionRow{
+    gap: 8px;
+}
+
+.adminIconActionButton{
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    padding: 0;
+    border-radius: 12px;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+
+/* =========================================
+   Information Table Styles
+========================================= */
+
+
+.adminTable{
+    width: 100%;
+    table-layout: fixed;
+}
+
+.adminTable th,
+.adminTable td{
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.adminIconActionButton{
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+}
+
+.adminIconActionRow{
+    gap: 8px;
+    flex-wrap: nowrap;
+}
+
+.adminTable th:nth-child(1),
+.adminTable td:nth-child(1){
+    width: 20%;
+}
+
+.adminTable th:nth-child(2),
+.adminTable td:nth-child(2){
+    width: 14%;
+}
+
+.adminTable th:nth-child(3),
+.adminTable td:nth-child(3){
+    width: 28%;
+}
+
+.adminTable th:nth-child(4),
+.adminTable td:nth-child(4){
+    width: 14%;
+}
+
+.adminTable th:nth-child(5),
+.adminTable td:nth-child(5){
+    width: 24%;
+}
+
+/* =========================================
+   Primary Button Styles
+========================================= */
+
+.adminPrimaryButton{
+    min-width: 120px;
+    height: 40px;
+    border: none;
+    border-radius: 18px;
+    color: #ffffff;
+    background: linear-gradient(90deg, #145ed8 0%, #169fdf 100%);
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.16);
+    transition: all 0.2s ease;
+}
+
+.adminPrimaryButton:hover{
+    color: #145ed8;
+    background: #eef7ff;
+    transform: translateY(-1px);
+}
+
+.adminSecondaryButton{
+    color: #000000;
+    background: #ececec;
+}
+
+.adminSecondaryButton:hover{
+    color: #ffffff;
+    background: linear-gradient(90deg, #145ed8 0%, #169fdf 100%);
 }

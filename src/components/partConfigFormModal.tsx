@@ -133,7 +133,7 @@ function PartConfigFormModal({
         parsedExpectedLotLength === undefined
       ) {
         setErrorMessage(
-          'Para doble lectura son obligatorios RFID Program, Expected GTIN y Expected Lot Length.',
+          'Para doble lectura son obligatorios RFID Program, GTIN esperado y Longitud esperada del lote.',
         );
         return;
       }
@@ -141,7 +141,7 @@ function PartConfigFormModal({
 
     if (isSingleScan && !rawExpectedGtin) {
       setErrorMessage(
-        'Para single scan es obligatorio Expected GTIN para poder resolver la orden desde el escaneo.',
+        'Para lectura simple es obligatorio GTIN esperado para poder resolver la orden desde el escaneo.',
       );
       return;
     }
@@ -187,7 +187,7 @@ function PartConfigFormModal({
                 : 'Captura los datos del numero de parte que quieres administrar.'}
             </p>
           </div>
-          <button className='buttonSelector' type='button' onClick={onClose} disabled={isSubmitting}>
+          <button className='adminPrimaryButton' type='button' onClick={onClose} disabled={isSubmitting}>
             Cerrar
           </button>
         </div>
@@ -212,7 +212,7 @@ function PartConfigFormModal({
             </label>
 
             <label className='adminField'>
-              <span>Reading mode</span>
+              <span>Modo de lectura</span>
               <select
                 value={values.readingMode}
                 onChange={(event) =>
@@ -224,8 +224,8 @@ function PartConfigFormModal({
                 disabled={isSubmitting || isCopyMode}
               >
                 <option value='manual'>Manual</option>
-                <option value='single_scan'>Single Scan</option>
-                <option value='double_scan'>Double Scan</option>
+                <option value='single_scan'>Lectura simple</option>
+                <option value='double_scan'>Doble Escaneo</option>
               </select>
             </label>
 
@@ -246,7 +246,7 @@ function PartConfigFormModal({
             </label>
 
             <label className='adminField'>
-              <span>RFID Program</span>
+              <span>Programa RFID</span>
               <select
                 value={values.rfidProgram}
                 onChange={(event) =>
@@ -257,7 +257,7 @@ function PartConfigFormModal({
                 }
                 disabled={isSubmitting || isCatalogLoading}
               >
-                <option value=''>Selecciona un RFID Program</option>
+                <option value=''>Selecciona un Programa RFID</option>
                 {showUnavailableRfidProgram && (
                   <option value={values.rfidProgram}>
                     {`${values.rfidProgram} (inactivo o no disponible)`}
@@ -272,7 +272,7 @@ function PartConfigFormModal({
             </label>
 
             <label className='adminField'>
-              <span>Expected GTIN</span>
+              <span>GTIN esperado</span>
               <select
                 value={values.expectedGtin}
                 onChange={(event) =>
@@ -298,7 +298,7 @@ function PartConfigFormModal({
             </label>
 
             <label className='adminField'>
-              <span>Filter label</span>
+              <span>Etiqueta de filtro</span>
               <input
                 type='text'
                 value={values.filterLabel}
@@ -314,7 +314,7 @@ function PartConfigFormModal({
             </label>
 
             <label className='adminField'>
-              <span>Expected lot length</span>
+              <span>Longitud esperada del lote</span>
               <input
                 type='number'
                 min='1'
@@ -366,9 +366,9 @@ function PartConfigFormModal({
             {isCopyMode
               ? 'Los demas campos quedan bloqueados para clonar la configuracion actual y cambiar solo el numero de parte, el GTIN o el RFID Program.'
               : isDoubleScan
-              ? 'En doble lectura son obligatorios RFID Program, Expected GTIN y Expected Lot Length. Ambos deben existir activos en catalogo.'
+              ? 'En doble lectura son obligatorios RFID Program, GTIN esperado y Longitud esperada del lote. Ambos deben existir activos en catalogo.'
               : isSingleScan
-              ? 'En single scan es obligatorio Expected GTIN para poder resolver la orden con el escaneo. Si capturas RFID Program, tambien debe existir activo en catalogo.'
+              ? 'En lectura simple es obligatorio GTIN esperado para poder resolver la orden con el escaneo. Si capturas RFID Program, tambien debe existir activo en catalogo.'
               : 'Para manual, los campos tecnicos son opcionales. Si capturas GTIN o RFID Program, deben existir activos en catalogo.'}
           </p>
 
@@ -381,10 +381,10 @@ function PartConfigFormModal({
           {errorMessage && <div className='adminMessage error'>{errorMessage}</div>}
 
           <div className='adminModalFooter'>
-            <button className='buttonSelector' type='button' onClick={onClose} disabled={isSubmitting}>
+            <button className='adminPrimaryButton adminSecondaryButton' type='button' onClick={onClose} disabled={isSubmitting}>
               Cancelar
             </button>
-            <button className='buttonSelector' type='submit' disabled={isSubmitting}>
+            <button className='adminPrimaryButton' type='submit' disabled={isSubmitting}>
               {isSubmitting ? submittingLabel : submitLabel}
             </button>
           </div>
