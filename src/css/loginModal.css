@@ -132,3 +132,46 @@
     color: white;
     background: linear-gradient(90deg, #145ed8 0%, #169fdf 100%);
 }
+
+/* =========================================
+Styles User dropbox selection 
+========================================= */
+
+.modalFieldUser{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .5rem;
+}
+
+.modalFieldUser span{
+    font-size: 16px;
+    font-weight: 700;
+    color: #1f2937;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+.modalFieldUser select {
+  max-width: 260px;
+  padding: 0.5rem 1rem;
+  border-radius: 1rem;
+  border: 2px solid #cfd8e3;
+  background: #ffffff;
+  color: #1f2a3d;
+  font-size: 1rem;
+  font-weight: 600;
+  outline: none;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.15s ease;
+}
+
+.modalFieldUser select:focus {
+  border-color: #2495ff;
+  box-shadow: 0 0 0 4px rgba(36, 149, 255, 0.12);
+}
+
+.modalFieldUser select:hover {
+  border-color: #2495ff;
+}
