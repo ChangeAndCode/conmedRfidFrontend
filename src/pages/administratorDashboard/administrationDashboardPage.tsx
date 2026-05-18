@@ -814,7 +814,7 @@ function AdministrationDashboardPage() {
 
         <div className='adminToolbarActions'>
           <button
-            className='buttonSelector'
+            className='adminPrimaryButton'
             type='button'
             onClick={() => {
               setMessage(null);
@@ -823,7 +823,7 @@ function AdministrationDashboardPage() {
           >
             Crear nuevo
           </button>
-          <button className='buttonSelector' type='button' onClick={() => void loadPartConfigs()}>
+          <button className='adminPrimaryButton' type='button' onClick={() => void loadPartConfigs()}>
             Recargar
           </button>
         </div>
@@ -844,7 +844,6 @@ function AdministrationDashboardPage() {
                 <th>Numero de parte</th>
                 <th>Modo</th>
                 <th>Fecha de creacion</th>
-                <th>Quien lo creo</th>
                 <th>Estatus</th>
                 <th>Acciones</th>
               </tr>
@@ -852,13 +851,13 @@ function AdministrationDashboardPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className='adminTableEmpty'>
+                  <td colSpan={5} className='adminTableEmpty'>
                     Cargando numeros de parte...
                   </td>
                 </tr>
               ) : partConfigs.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className='adminTableEmpty'>
+                  <td colSpan={5} className='adminTableEmpty'>
                     No hay configuraciones registradas por mostrar.
                   </td>
                 </tr>
@@ -868,37 +867,41 @@ function AdministrationDashboardPage() {
                     <td>{config.partNumber}</td>
                     <td>{formatReadingMode(config.readingMode)}</td>
                     <td>{formatDate(config.createdAt)}</td>
-                    <td>{config.createdBy?.trim() ? config.createdBy : 'N/D'}</td>
                     <td>
                       <span className={`adminBadge ${config.isActive ? 'active' : 'inactive'}`}>
                         {config.isActive ? 'Activo' : 'Inactivo'}
                       </span>
                     </td>
                     <td>
-                      <div className='adminActionRow'>
+                      <div className='adminActionRow adminIconActionRow'>
                         <button
-                          className='adminActionButton'
+                          className='adminActionButton adminIconActionButton'
                           type='button'
+                          title='Editar'
                           onClick={() => {
                             setMessage(null);
                             setEditingPartConfig(config);
                           }}
                         >
-                          Editar
+                          ✎
                         </button>
+
                         <button
-                          className='adminActionButton'
+                          className='adminActionButton adminIconActionButton'
                           type='button'
+                          title='Copiar'
                           onClick={() => {
                             setMessage(null);
                             setCopyingPartConfig(config);
                           }}
                         >
-                          Copiar
+                          ⧉
                         </button>
+                      
                         <button
-                          className='adminActionButton'
+                          className='adminActionButton adminIconActionButton'
                           type='button'
+                          title={config.isActive ? 'Desactivar' : 'Activar'}
                           onClick={() => {
                             setMessage(null);
                             setPendingAction({
@@ -907,11 +910,13 @@ function AdministrationDashboardPage() {
                             });
                           }}
                         >
-                          {config.isActive ? 'Desactivar' : 'Activar'}
+                          {config.isActive ? '⏸' : '▶'}
                         </button>
+                      
                         <button
-                          className='adminActionButton delete'
+                          className='adminActionButton adminIconActionButton delete'
                           type='button'
+                          title='Eliminar'
                           onClick={() => {
                             setMessage(null);
                             setPendingAction({
@@ -920,7 +925,7 @@ function AdministrationDashboardPage() {
                             });
                           }}
                         >
-                          Eliminar
+                          ✕
                         </button>
                       </div>
                     </td>
@@ -944,7 +949,7 @@ function AdministrationDashboardPage() {
 
         <div className='adminToolbarActions'>
           <button
-            className='buttonSelector'
+            className='adminPrimaryButton'
             type='button'
             onClick={() => {
               setMessage(null);
@@ -953,7 +958,7 @@ function AdministrationDashboardPage() {
           >
             Crear nuevo
           </button>
-          <button className='buttonSelector' type='button' onClick={() => void loadGtins()}>
+          <button className='adminPrimaryButton' type='button' onClick={() => void loadGtins()}>
             Recargar
           </button>
         </div>
@@ -1003,19 +1008,19 @@ function AdministrationDashboardPage() {
                       </span>
                     </td>
                     <td>
-                      <div className='adminActionRow'>
+                      <div className='adminActionRow adminIconActionRow'>
                         <button
-                          className='adminActionButton'
+                          className='adminActionButton adminIconActionButton'
                           type='button'
                           onClick={() => {
                             setMessage(null);
                             setEditingGtin(gtin);
                           }}
                         >
-                          Editar
+                          ✎
                         </button>
                         <button
-                          className='adminActionButton'
+                          className='adminActionButton adminIconActionButton'
                           type='button'
                           onClick={() => {
                             setMessage(null);
@@ -1025,11 +1030,11 @@ function AdministrationDashboardPage() {
                             });
                           }}
                         >
-                          {gtin.isActive ? 'Desactivar' : 'Activar'}
+                          {gtin.isActive ? '⏸' : '▶'}
                         </button>
                         {gtin.isActive && (
                           <button
-                            className='adminActionButton delete'
+                            className='adminActionButton adminIconActionButton delete'
                             type='button'
                             onClick={() => {
                               setMessage(null);
@@ -1039,7 +1044,7 @@ function AdministrationDashboardPage() {
                               });
                             }}
                           >
-                            Eliminar
+                            ✕
                           </button>
                         )}
                       </div>
@@ -1064,7 +1069,7 @@ function AdministrationDashboardPage() {
 
         <div className='adminToolbarActions'>
           <button
-            className='buttonSelector'
+            className='adminPrimaryButton'
             type='button'
             onClick={() => {
               setMessage(null);
@@ -1073,7 +1078,7 @@ function AdministrationDashboardPage() {
           >
             Crear nuevo
           </button>
-          <button className='buttonSelector' type='button' onClick={() => void loadRfidPrograms()}>
+          <button className='adminPrimaryButton' type='button' onClick={() => void loadRfidPrograms()}>
             Recargar
           </button>
         </div>
@@ -1125,19 +1130,19 @@ function AdministrationDashboardPage() {
                       </span>
                     </td>
                     <td>
-                      <div className='adminActionRow'>
+                      <div className='adminActionRow adminIconActionRow'>
                         <button
-                          className='adminActionButton'
+                          className='adminActionButton adminIconActionButton'
                           type='button'
                           onClick={() => {
                             setMessage(null);
                             setEditingRfidProgram(rfidProgram);
                           }}
                         >
-                          Editar
+                          ✎
                         </button>
                         <button
-                          className='adminActionButton'
+                          className='adminActionButton adminIconActionButton'
                           type='button'
                           onClick={() => {
                             setMessage(null);
@@ -1147,11 +1152,11 @@ function AdministrationDashboardPage() {
                             });
                           }}
                         >
-                          {rfidProgram.isActive ? 'Desactivar' : 'Activar'}
+                          {rfidProgram.isActive ? '⏸' : '▶'}
                         </button>
                         {rfidProgram.isActive && (
                           <button
-                            className='adminActionButton delete'
+                            className='adminActionButton adminIconActionButton  delete'
                             type='button'
                             onClick={() => {
                               setMessage(null);
@@ -1161,7 +1166,7 @@ function AdministrationDashboardPage() {
                               });
                             }}
                           >
-                            Eliminar
+                            ✕
                           </button>
                         )}
                       </div>
@@ -1214,7 +1219,7 @@ function AdministrationDashboardPage() {
 
         <div className='adminToolbarActions'>
           <button
-            className='buttonSelector'
+            className='adminPrimaryButton'
             type='button'
             onClick={() => {
               setMessage(null);
@@ -1224,7 +1229,7 @@ function AdministrationDashboardPage() {
             Crear orden
           </button>
           <button
-            className='buttonSelector'
+            className='adminPrimaryButton'
             type='button'
             onClick={() => {
               void loadServiceOrders();
@@ -1290,7 +1295,7 @@ function AdministrationDashboardPage() {
                     </td>
                     <td>{formatDate(serviceOrder.updatedAt ?? serviceOrder.createdAt)}</td>
                     <td>
-                      <div className='adminActionRow'>
+                      <div className='adminActionRow adminIconActionRow'>
                         <button
                           className='adminActionButton'
                           type='button'
@@ -1299,7 +1304,7 @@ function AdministrationDashboardPage() {
                             setEditingServiceOrder(serviceOrder);
                           }}
                         >
-                          Editar
+                          ✎
                         </button>
                       </div>
                     </td>
@@ -1353,7 +1358,7 @@ function AdministrationDashboardPage() {
                       <span className='adminBadge inactive'>Pending</span>
                     </td>
                     <td>
-                      <div className='adminActionRow'>
+                      <div className='adminActionRow adminIconActionRow'>
                         <button
                           className='adminActionButton'
                           type='button'
@@ -1362,7 +1367,7 @@ function AdministrationDashboardPage() {
                             setResolvingChangeRequest(changeRequest);
                           }}
                         >
-                          Resolver
+                          ✔
                         </button>
                       </div>
                     </td>
@@ -1449,7 +1454,7 @@ function AdministrationDashboardPage() {
 
         <div className='adminToolbarActions'>
           <button
-            className='buttonSelector'
+            className='adminPrimaryButton'
             type='button'
             onClick={() => {
               setMessage(null);

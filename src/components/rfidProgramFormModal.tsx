@@ -34,12 +34,12 @@ function RfidProgramFormModal({
     const normalizedValue = value.trim().toUpperCase();
 
     if (!normalizedValue) {
-      setErrorMessage('El RFID program es obligatorio.');
+      setErrorMessage('El Programa RFID es obligatorio.');
       return;
     }
 
     if (normalizedValue.length > RFID_PROGRAM_MAX_LENGTH) {
-      setErrorMessage(`El RFID program no debe exceder ${RFID_PROGRAM_MAX_LENGTH} caracteres.`);
+      setErrorMessage(`El Programa RFID no debe exceder ${RFID_PROGRAM_MAX_LENGTH} caracteres.`);
       return;
     }
 
@@ -53,7 +53,7 @@ function RfidProgramFormModal({
       });
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : 'No se pudo guardar el RFID program.',
+        error instanceof Error ? error.message : 'No se pudo guardar el Programa RFID.',
       );
     } finally {
       setIsSubmitting(false);
@@ -66,9 +66,9 @@ function RfidProgramFormModal({
         <div className='adminModalHeader'>
           <div className='adminModalTitleBlock'>
             <h2>{title}</h2>
-            <p>Administra el catalogo de RFID Program disponibles para seleccionar en numeros de parte.</p>
+            <p>Administra el catalogo de Programas RFID disponibles para seleccionar en numeros de parte.</p>
           </div>
-          <button className='buttonSelector' type='button' onClick={onClose} disabled={isSubmitting}>
+          <button className='adminPrimaryButton adminSecondaryButton' type='button' onClick={onClose} disabled={isSubmitting}>
             Cerrar
           </button>
         </div>
@@ -76,7 +76,7 @@ function RfidProgramFormModal({
         <form className='adminForm' onSubmit={handleSubmit}>
           <div className='adminFormGrid'>
             <label className='adminField adminFieldFull'>
-              <span>RFID Program</span>
+              <span>Programa RFID</span>
               <input
                 type='text'
                 maxLength={RFID_PROGRAM_MAX_LENGTH}
@@ -100,16 +100,16 @@ function RfidProgramFormModal({
           </label>
 
           <p className='adminFieldHint'>
-            El RFID program se normaliza a mayusculas y no debe exceder {RFID_PROGRAM_MAX_LENGTH} caracteres.
+            El Programa RFID se normaliza a mayusculas y no debe exceder {RFID_PROGRAM_MAX_LENGTH} caracteres.
           </p>
 
           {errorMessage && <div className='adminMessage error'>{errorMessage}</div>}
 
           <div className='adminModalFooter'>
-            <button className='buttonSelector' type='button' onClick={onClose} disabled={isSubmitting}>
+            <button className='adminPrimaryButton adminSecondaryButton' type='button' onClick={onClose} disabled={isSubmitting}>
               Cancelar
             </button>
-            <button className='buttonSelector' type='submit' disabled={isSubmitting}>
+            <button className='adminPrimaryButton' type='submit' disabled={isSubmitting}>
               {isSubmitting ? submittingLabel : submitLabel}
             </button>
           </div>

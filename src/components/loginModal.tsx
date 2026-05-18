@@ -71,7 +71,7 @@ function LoginModal({
             </div>
 
             <label className='modalField'>
-              <span>Email</span>
+              <span>Correo electrónico</span>
               <input
                 type='email'
                 value={credentials.email}
@@ -89,11 +89,11 @@ function LoginModal({
             </label>
 
             <label className='modalField'>
-              <span>Password</span>
+              <span>Contraseña</span>
               <input
                 type='password'
                 value={credentials.password}
-                placeholder='12345678'
+                placeholder='Escribe tu contraseña'
                 autoComplete='current-password'
                 onChange={(event) =>
                   setCredentials((currentCredentials) => ({
@@ -112,11 +112,16 @@ function LoginModal({
 
             {errorMessage && <p className='modalMessage error'>{errorMessage}</p>}
 
-            <div>
-              <button className='buttonSelector' type='submit' disabled={isSubmitting}>
+            <div className='loginActions'>
+              <button className='loginButton loginButtonPrimary' type='submit' disabled={isSubmitting}>
                 {isSubmitting ? 'Validando...' : 'Iniciar Sesion'}
               </button>
-              <button className='buttonSelector' type='button' onClick={onClose} disabled={isSubmitting}>
+              <button
+                className='loginButton loginButtonSecondary'
+                type='button'
+                onClick={onClose}
+                disabled={isSubmitting}
+              >
                 Cerrar
               </button>
             </div>

@@ -29,7 +29,7 @@ function ConfirmActionModal({
 
         <div className='adminConfirmActions'>
           <button
-            className='buttonSelector'
+            className='adminPrimaryButton adminSecondaryButton'
             type='button'
             onClick={onCancel}
             disabled={isSubmitting}
@@ -37,7 +37,7 @@ function ConfirmActionModal({
             {cancelLabel}
           </button>
           <button
-            className={`buttonSelector ${confirmVariant === 'danger' ? 'adminDangerButton' : ''}`}
+            className={`adminPrimaryButton ${confirmVariant === 'danger' ? 'danger' : ''}`}
             type='button'
             onClick={() => void onConfirm()}
             disabled={isSubmitting}

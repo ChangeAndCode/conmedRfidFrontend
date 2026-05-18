@@ -67,7 +67,7 @@ function GtinFormModal({
             <h2>{title}</h2>
             <p>Administra el catalogo de GTIN disponibles para seleccionar en numeros de parte.</p>
           </div>
-          <button className='buttonSelector' type='button' onClick={onClose} disabled={isSubmitting}>
+          <button className='adminPrimaryButton adminSecondaryButton' type='button' onClick={onClose} disabled={isSubmitting}>
             Cerrar
           </button>
         </div>
@@ -104,10 +104,10 @@ function GtinFormModal({
           {errorMessage && <div className='adminMessage error'>{errorMessage}</div>}
 
           <div className='adminModalFooter'>
-            <button className='buttonSelector' type='button' onClick={onClose} disabled={isSubmitting}>
+            <button className='adminPrimaryButton adminSecondaryButton' type='button' onClick={onClose} disabled={isSubmitting}>
               Cancelar
             </button>
-            <button className='buttonSelector' type='submit' disabled={isSubmitting}>
+            <button className='adminPrimaryButton' type='submit' disabled={isSubmitting}>
               {isSubmitting ? submittingLabel : submitLabel}
             </button>
           </div>

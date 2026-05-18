@@ -21,7 +21,7 @@
 
 .modalFormContent{
     display: grid;
-    gap: 16px;
+    gap: 18px;
 }
 
 .modalContent div{
@@ -33,18 +33,37 @@
 }
 
 .modalContent input{
-    height: 30px;
+    height: 44px;
     width: 100%;
+    padding: 0 14px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 12px;
+    font-size: 16px;
+    color: #111827;
+    outline: none;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.modalContent input:focus{
+    border-color: #169fdf;
+    box-shadow: 0 0 0 4px rgba(22, 159, 223, 0.14);
+}
+
+.modalContent input::placeholder{
+    color: #9ca3af;
 }
 
 .modalField{
     display: grid;
-    gap: 8px;
+    gap: 10px;
 }
 
 .modalField span{
-    font-size: 18px;
-    font-weight: 600;
+    font-size: 16px;
+    font-weight: 700;
+    color: #1f2937;
+    font-family: Arial, Helvetica, sans-serif;
 }
 
 .modalMessage{
@@ -58,4 +77,58 @@
 
 .modalMessage.error{
     color: #c62828;
+}
+
+.modalHeader{
+    text-align: center;
+}
+
+.modalHeader h1{
+    font-size: 32px;
+    font-weight: 800;
+    margin: 0;
+}
+
+.modalHeader p{
+    font-size: 18px;
+    color: #555;
+}
+
+.loginActions{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    margin-top: 20px;
+}
+
+.loginButton{
+    width: 180px;
+    height: 45px;
+    border: none;
+    border-radius: 28px;
+    font-size: 18px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.loginButtonPrimary{
+    color: white;
+    background: linear-gradient(90deg, #145ed8 0%, #169fdf 100%);
+}
+
+.loginButtonPrimary:hover{
+    color: #145ed8;
+    background: #eef7ff;
+}
+
+.loginButtonSecondary{
+    color: black;
+    background: #ececec;
+}
+
+.loginButtonSecondary:hover{
+    color: white;
+    background: linear-gradient(90deg, #145ed8 0%, #169fdf 100%);
 }

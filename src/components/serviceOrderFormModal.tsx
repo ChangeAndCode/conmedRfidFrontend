@@ -192,7 +192,7 @@ function ServiceOrderFormModal({
               numero de parte; doble codigo usa GTIN y RFID Program.
             </p>
           </div>
-          <button className='buttonSelector' type='button' onClick={onClose} disabled={isSubmitting}>
+          <button className='adminPrimaryButton adminSecondaryButton' type='button' onClick={onClose} disabled={isSubmitting}>
             Cerrar
           </button>
         </div>
@@ -236,8 +236,8 @@ function ServiceOrderFormModal({
                 disabled={isSubmitting}
               >
                 <option value='manual'>Manual</option>
-                <option value='single_scan'>Single Scan</option>
-                <option value='double_scan'>Doble codigo</option>
+                <option value='single_scan'>Lectura simple</option>
+                <option value='double_scan'>Doble escaneo</option>
               </select>
             </label>
 
@@ -347,7 +347,7 @@ function ServiceOrderFormModal({
 
             {allowStatusSelection && (
               <label className='adminField'>
-                <span>Status</span>
+                <span>Estado</span>
                 <select
                   value={values.status}
                   onChange={(event) =>
@@ -358,8 +358,8 @@ function ServiceOrderFormModal({
                   }
                   disabled={isSubmitting}
                 >
-                  <option value='open'>Open</option>
-                  <option value='closed'>Closed</option>
+                  <option value='open'>Abierto</option>
+                  <option value='closed'>Cerrado</option>
                 </select>
               </label>
             )}
@@ -411,10 +411,10 @@ function ServiceOrderFormModal({
           {errorMessage && <div className='adminMessage error'>{errorMessage}</div>}
 
           <div className='adminModalFooter'>
-            <button className='buttonSelector' type='button' onClick={onClose} disabled={isSubmitting}>
+            <button className='adminPrimaryButton adminSecondaryButton' type='button' onClick={onClose} disabled={isSubmitting}>
               Cancelar
             </button>
-            <button className='buttonSelector' type='submit' disabled={isSubmitting}>
+            <button className='adminPrimaryButton' type='submit' disabled={isSubmitting}>
               {isSubmitting ? submittingLabel : submitLabel}
             </button>
           </div>
