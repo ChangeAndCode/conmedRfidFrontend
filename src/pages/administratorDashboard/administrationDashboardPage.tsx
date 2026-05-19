@@ -52,6 +52,12 @@ import type {
   ServiceOrderChangeRequest,
   ServiceOrderMutationPayload,
 } from '../../types/ServiceOrder';
+import {
+  deleteUser,
+  getUsers,
+  updateUserStatus,
+} from '../../services/userService';
+import type { User } from '../../types/Auth';
 
 type DashboardMessage = {
   type: 'info' | 'error' | 'success';
@@ -72,6 +78,11 @@ type PendingRfidProgramAction =
   | { type: 'activate'; rfidProgram: RfidProgram }
   | { type: 'deactivate'; rfidProgram: RfidProgram }
   | { type: 'delete'; rfidProgram: RfidProgram };
+
+type PendingUserAction =
+  | { type: 'activate'; user: User }
+  | { type: 'deactivate'; user: User }
+  | { type: 'delete'; user: User };
 
 type AdminSectionId =
   | 'dashboard'
@@ -226,6 +237,8 @@ function AdministrationDashboardPage() {
   const [partConfigs, setPartConfigs] = useState<PartConfig[]>([]);
   const [gtins, setGtins] = useState<Gtin[]>([]);
   const [rfidPrograms, setRfidPrograms] = useState<RfidProgram[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingGtins, setIsLoadingGtins] = useState(true);
   const [isLoadingRfidPrograms, setIsLoadingRfidPrograms] = useState(true);
@@ -253,9 +266,11 @@ function AdministrationDashboardPage() {
   const [pendingGtinAction, setPendingGtinAction] = useState<PendingGtinAction | null>(null);
   const [pendingRfidProgramAction, setPendingRfidProgramAction] =
     useState<PendingRfidProgramAction | null>(null);
+  const [pendingUserAction, setPendingUserAction] = useState<PendingUserAction | null>(null);
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
   const [isSubmittingGtinAction, setIsSubmittingGtinAction] = useState(false);
   const [isSubmittingRfidProgramAction, setIsSubmittingRfidProgramAction] = useState(false);
+  const [isSubmittingUserAction, setIsSubmittingUserAction] = useState(false);
   const visibleSections = isSupervisor ? SUPERVISOR_SECTIONS : ADMIN_SECTIONS;
 
   const activeSectionConfig =
@@ -368,6 +383,34 @@ function AdministrationDashboardPage() {
     }
   };
 
+  const loadUsers = async (options?: { clearMessage?: boolean; suppressErrorMessage?: boolean }) => {
+    setIsLoadingUsers(true);
+
+    if (options?.clearMessage ?? true) {
+      setMessage(null);
+    }
+
+    try {
+      const nextUsers = await getUsers();
+      setUsers(nextUsers);
+      return true;
+    } catch (error) {
+      setUsers([]);
+      if (!(options?.suppressErrorMessage ?? false)) {
+        setMessage({
+          type: 'error',
+          text:
+            error instanceof Error
+              ? error.message
+              : 'No se pudo conectar con el backend para cargar usuarios.',
+        });
+      }
+      return false;
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  };
+
   const loadServiceOrders = async (options?: { clearMessage?: boolean }) => {
     setIsLoadingServiceOrders(true);
 
@@ -472,6 +515,7 @@ function AdministrationDashboardPage() {
       void loadGtins({ clearMessage: false });
       void loadRfidPrograms({ clearMessage: false });
       void loadProgrammingRecords({ clearMessage: false });
+      void loadUsers({ clearMessage: false });
     }
   }, [isAdmin, isSupervisor]);
 
@@ -737,6 +781,53 @@ function AdministrationDashboardPage() {
       });
     } finally {
       setIsSubmittingRfidProgramAction(false);
+    }
+  };
+
+  const handleConfirmPendingUserAction = async () => {
+    if (!pendingUserAction) {
+      return;
+    }
+
+    setIsSubmittingUserAction(true);
+
+    try {
+      switch (pendingUserAction.type) {
+        case 'activate':
+          await updateUserStatus(pendingUserAction.user.id, true);
+          break;
+        case 'deactivate':
+          await updateUserStatus(pendingUserAction.user.id, false);
+          break;
+        case 'delete':
+          await deleteUser(pendingUserAction.user.id);
+          break;
+      }
+
+      setPendingUserAction(null);
+      const didRefreshList = await loadUsers({ clearMessage: false });
+
+      if (didRefreshList) {
+        setMessage({
+          type: 'success',
+          text:
+            pendingUserAction.type === 'delete'
+              ? 'Usuario eliminado correctamente.'
+              : pendingUserAction.type === 'deactivate'
+                ? 'Usuario deshabilitado correctamente.'
+                : 'Usuario habilitado correctamente.',
+        });
+      }
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'No se pudo completar la accion solicitada para el usuario.',
+      });
+    } finally {
+      setIsSubmittingUserAction(false);
     }
   };
 
@@ -1490,9 +1581,16 @@ function AdministrationDashboardPage() {
             <strong>{user?.email ?? 'N/D'}</strong>
           </div>
           <div className='adminInfoItem'>
-            <span>Accion disponible</span>
-            <strong>Registrar usuario</strong>
+            <span>Usuarios registrados</span>
+            <strong>{isLoadingUsers ? '...' : String(users.length)}</strong>
           </div>
+        </div>
+      </article>
+
+      <div className='adminToolbar'>
+        <div>
+          <h2>Usuarios</h2>
+          <p>Administra usuarios registrados, permisos de acceso y eliminacion.</p>
         </div>
 
         <div className='adminToolbarActions'>
@@ -1506,8 +1604,103 @@ function AdministrationDashboardPage() {
           >
             Registrar usuario
           </button>
+          <button className='adminPrimaryButton' type='button' onClick={() => void loadUsers()}>
+            Recargar
+          </button>
         </div>
-      </article>
+      </div>
+
+      <div className='adminTableCard'>
+        <div className='adminTableHeader'>
+          <h3>Listado de usuarios</h3>
+          <p className='adminTableMeta'>
+            {isLoadingUsers ? 'Cargando...' : `${users.length} usuarios encontrados`}
+          </p>
+        </div>
+
+        <div className='adminTableWrapper'>
+          <table className='adminTable adminUsersTable'>
+            <thead>
+              <tr>
+                <th>Usuario</th>
+                <th>Correo</th>
+                <th>Rol</th>
+                <th>Creacion</th>
+                <th>Estatus</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoadingUsers ? (
+                <tr>
+                  <td colSpan={6} className='adminTableEmpty'>
+                    Cargando usuarios...
+                  </td>
+                </tr>
+              ) : users.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className='adminTableEmpty'>
+                    No hay usuarios registrados por mostrar.
+                  </td>
+                </tr>
+              ) : (
+                users.map((managedUser) => {
+                  const isCurrentUser = managedUser.id === user?.id;
+
+                  return (
+                    <tr key={managedUser.id}>
+                      <td>{managedUser.username}</td>
+                      <td>{managedUser.email}</td>
+                      <td>{managedUser.role}</td>
+                      <td>{new Date(managedUser.createdAt ?? '').toLocaleDateString('es-MX')}</td>
+                      <td>
+                        <span className={`adminBadge ${managedUser.isActive ? 'active' : 'inactive'}`}>
+                          {managedUser.isActive ? 'Activo' : 'Inactivo'}
+                        </span>
+                      </td>
+                      <td>
+                        <div className='adminActionRow adminIconActionRow adminUsersActionRow'>
+                          <button
+                            className='adminActionButton adminIconActionButton'
+                            type='button'
+                            title={managedUser.isActive ? 'Deshabilitar' : 'Habilitar'}
+                            disabled={isCurrentUser}
+                            onClick={() => {
+                              setMessage(null);
+                              setPendingUserAction({
+                                type: managedUser.isActive ? 'deactivate' : 'activate',
+                                user: managedUser,
+                              });
+                            }}
+                          >
+                            {managedUser.isActive ? '⏸' : '▶'}
+                          </button>
+
+                          <button
+                            className='adminActionButton adminIconActionButton delete'
+                            type='button'
+                            title='Eliminar'
+                            disabled={isCurrentUser}
+                            onClick={() => {
+                              setMessage(null);
+                              setPendingUserAction({
+                                type: 'delete',
+                                user: managedUser,
+                              });
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </section>
   );
 
@@ -1644,6 +1837,7 @@ function AdministrationDashboardPage() {
           onClose={() => setIsRegisterModalOpen(false)}
           onSuccess={(nextUser) => {
             setIsRegisterModalOpen(false);
+            void loadUsers({ clearMessage: false });
             setMessage({
               type: 'success',
               text: `Usuario ${nextUser.username} registrado correctamente.`,
@@ -1812,6 +2006,36 @@ function AdministrationDashboardPage() {
           isSubmitting={isSubmittingRfidProgramAction}
           onCancel={() => setPendingRfidProgramAction(null)}
           onConfirm={handleConfirmPendingRfidProgramAction}
+        />
+      )}
+
+      {pendingUserAction && (
+        <ConfirmActionModal
+          title={
+            pendingUserAction.type === 'delete'
+              ? 'Confirmar eliminacion de usuario'
+              : pendingUserAction.type === 'deactivate'
+                ? 'Confirmar deshabilitacion de usuario'
+                : 'Confirmar habilitacion de usuario'
+          }
+          message={
+            pendingUserAction.type === 'delete'
+              ? `Se eliminara el usuario ${pendingUserAction.user.username}. Esta accion no se puede deshacer. Deseas continuar?`
+              : pendingUserAction.type === 'deactivate'
+                ? `Se deshabilitara el usuario ${pendingUserAction.user.username}. No podra iniciar sesion hasta ser habilitado de nuevo. Deseas continuar?`
+                : `Se habilitara el usuario ${pendingUserAction.user.username}. Deseas continuar?`
+          }
+          confirmLabel={
+            pendingUserAction.type === 'delete'
+              ? 'Eliminar'
+              : pendingUserAction.type === 'deactivate'
+                ? 'Deshabilitar'
+                : 'Habilitar'
+          }
+          confirmVariant={pendingUserAction.type === 'delete' ? 'danger' : 'default'}
+          isSubmitting={isSubmittingUserAction}
+          onCancel={() => setPendingUserAction(null)}
+          onConfirm={handleConfirmPendingUserAction}
         />
       )}
 

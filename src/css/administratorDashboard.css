@@ -31,6 +31,7 @@
         linear-gradient(180deg, rgba(11, 22, 36, 0.96) 0%, rgba(11, 18, 31, 0.92) 100%);
     border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: 0 30px 80px rgba(0, 0, 0, 0.32);
+    -webkit-backdrop-filter: blur(20px);
     backdrop-filter: blur(20px);
 }
 
@@ -159,6 +160,7 @@
     background: rgba(244, 247, 251, 0.82);
     border: 1px solid rgba(255, 255, 255, 0.18);
     box-shadow: 0 30px 80px rgba(0, 0, 0, 0.28);
+    -webkit-backdrop-filter: blur(20px);
     backdrop-filter: blur(20px);
     color: #10243e;
 }
@@ -777,3 +779,48 @@
     color: #ffffff;
     background: linear-gradient(90deg, #145ed8 0%, #169fdf 100%);
 }
+<<<<<<< HEAD
+=======
+
+/* =========================================
+   Information Table Styles Users
+========================================= */
+
+.adminUsersTable {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 0;
+}
+
+.adminUsersTable th,
+.adminUsersTable td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.adminUsersTable th:nth-child(1), .adminUsersTable td:nth-child(1) { width: 18%; }
+.adminUsersTable th:nth-child(2), .adminUsersTable td:nth-child(2) { width: 24%; }
+.adminUsersTable th:nth-child(3), .adminUsersTable td:nth-child(3) { width: 14%; }
+.adminUsersTable th:nth-child(4), .adminUsersTable td:nth-child(4) { width: 14%; }
+.adminUsersTable th:nth-child(5), .adminUsersTable td:nth-child(5) { width: 16%; }
+
+.adminUsersTable th:nth-child(6),
+.adminUsersTable td:nth-child(6) {
+  width: 14%;
+  text-align: center;
+}
+
+.adminUsersActionRow {
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: nowrap;
+}
+
+.adminUsersActionRow .adminIconActionButton {
+  width: 2.25rem;
+  min-width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+}
+>>>>>>> main
