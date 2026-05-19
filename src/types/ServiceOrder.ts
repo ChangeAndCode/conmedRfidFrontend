@@ -13,6 +13,10 @@ export interface ServiceOrder {
   gtin?: string;
   rfidProgram?: string;
   quantity: number;
+  programmedCount?: number;
+  verifiedCount?: number;
+  remainingToProgram?: number;
+  remainingToVerify?: number;
   status: ServiceOrderStatus;
   notes?: string;
   createdByUserId?: string;
@@ -24,7 +28,7 @@ export interface ServiceOrder {
 }
 
 export interface ServiceOrderMutationPayload {
-  folio: string;
+  folio?: string;
   readingMode: ServiceOrderReadingMode;
   partNumber?: string;
   gtin?: string;

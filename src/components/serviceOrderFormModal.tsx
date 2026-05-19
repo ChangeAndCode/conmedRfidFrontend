@@ -56,6 +56,19 @@ const buildFormValues = (initialData?: Partial<ServiceOrder>): ServiceOrderFormV
   notes: initialData?.notes ?? '',
 });
 
+const getFolioPrefixByReadingMode = (readingMode: ServiceOrderReadingMode) => {
+  switch (readingMode) {
+    case 'manual':
+      return 'ML';
+    case 'single_scan':
+      return 'LS';
+    case 'double_scan':
+      return 'DL';
+    default:
+      return '';
+  }
+};
+
 function ServiceOrderFormModal({
   title,
   submitLabel,
@@ -74,8 +87,10 @@ function ServiceOrderFormModal({
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isEditMode = Boolean(initialData?.folio);
   const isPartNumberBasedOrder =
     values.readingMode === 'manual' || values.readingMode === 'single_scan';
+  const generatedFolioPrefix = getFolioPrefixByReadingMode(values.readingMode);
   const activePartNumberConfigs = partConfigs.filter(
     (partConfig) =>
       partConfig.isActive &&
@@ -98,7 +113,6 @@ function ServiceOrderFormModal({
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const folio = values.folio.trim();
     const readingMode = values.readingMode;
     const partNumber = values.partNumber.trim().toUpperCase();
     const gtin = values.gtin.trim();
@@ -106,8 +120,8 @@ function ServiceOrderFormModal({
     const notes = values.notes.trim();
     const parsedQuantity = Number.parseInt(values.quantity.trim(), 10);
 
-    if (!folio || !values.quantity.trim()) {
-      setErrorMessage('Completa folio y cantidad.');
+    if (!values.quantity.trim()) {
+      setErrorMessage('Completa la cantidad.');
       return;
     }
 
@@ -163,7 +177,6 @@ function ServiceOrderFormModal({
 
     try {
       await onSubmit({
-        folio,
         readingMode,
         partNumber: readingMode === 'manual' || readingMode === 'single_scan' ? partNumber : undefined,
         gtin: readingMode === 'double_scan' ? gtin : undefined,
@@ -200,23 +213,6 @@ function ServiceOrderFormModal({
         <form className='adminForm' onSubmit={handleSubmit}>
           <div className='adminFormGrid'>
             <label className='adminField'>
-              <span>Folio</span>
-              <input
-                type='text'
-                value={values.folio}
-                onChange={(event) =>
-                  setValues((currentValues) => ({
-                    ...currentValues,
-                    folio: event.target.value,
-                  }))
-                }
-                placeholder='SO-001'
-                disabled={isSubmitting}
-                required
-              />
-            </label>
-
-            <label className='adminField'>
               <span>Tipo de orden</span>
               <select
                 value={values.readingMode}
@@ -240,6 +236,20 @@ function ServiceOrderFormModal({
                 <option value='double_scan'>Doble escaneo</option>
               </select>
             </label>
+
+            {isEditMode ? (
+              <label className='adminField'>
+                <span>Folio</span>
+                <input type='text' value={values.folio} disabled readOnly />
+              </label>
+            ) : (
+              <div className='adminField adminFieldFull'>
+                <span>Folio</span>
+                <div className='adminMessage info'>
+                  {`El folio se generara automaticamente al guardar con prefijo ${generatedFolioPrefix} y formato ${generatedFolioPrefix}YYYYMMDDHHMMSS.`}
+                </div>
+              </div>
+            )}
 
             {isPartNumberBasedOrder ? (
               <label className='adminField'>

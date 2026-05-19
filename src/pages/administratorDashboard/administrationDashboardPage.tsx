@@ -187,6 +187,24 @@ const formatServiceOrderPrimaryReference = (serviceOrder: ServiceOrder) => {
   return serviceOrder.gtin?.trim() || 'Sin GTIN';
 };
 
+const getServiceOrderProgrammedCount = (serviceOrder: ServiceOrder) => serviceOrder.programmedCount ?? 0;
+
+const getServiceOrderVerifiedCount = (serviceOrder: ServiceOrder) => serviceOrder.verifiedCount ?? 0;
+
+const getServiceOrderRemainingToProgram = (serviceOrder: ServiceOrder) =>
+  Math.max(
+    serviceOrder.remainingToProgram ??
+      serviceOrder.quantity - getServiceOrderProgrammedCount(serviceOrder),
+    0,
+  );
+
+const getServiceOrderRemainingToVerify = (serviceOrder: ServiceOrder) =>
+  Math.max(
+    serviceOrder.remainingToVerify ??
+      serviceOrder.quantity - getServiceOrderVerifiedCount(serviceOrder),
+    0,
+  );
+
 const formatChangeRequestType = (requestType: ServiceOrderChangeRequest['requestType']) => {
   switch (requestType) {
     case 'missing_product':
@@ -246,6 +264,26 @@ function AdministrationDashboardPage() {
   const inactivePartConfigsCount = partConfigs.length - activePartConfigsCount;
   const pendingChangeRequests = changeRequests.filter((request) => request.status === 'pending');
   const resolvedChangeRequests = changeRequests.filter((request) => request.status === 'resolved');
+  const totalPlannedFilters = serviceOrders.reduce(
+    (total, serviceOrder) => total + serviceOrder.quantity,
+    0,
+  );
+  const totalProgrammedFilters = serviceOrders.reduce(
+    (total, serviceOrder) => total + getServiceOrderProgrammedCount(serviceOrder),
+    0,
+  );
+  const totalVerifiedFilters = serviceOrders.reduce(
+    (total, serviceOrder) => total + getServiceOrderVerifiedCount(serviceOrder),
+    0,
+  );
+  const totalRemainingToProgram = serviceOrders.reduce(
+    (total, serviceOrder) => total + getServiceOrderRemainingToProgram(serviceOrder),
+    0,
+  );
+  const totalRemainingToVerify = serviceOrders.reduce(
+    (total, serviceOrder) => total + getServiceOrderRemainingToVerify(serviceOrder),
+    0,
+  );
   const loadPartConfigs = async (options?: { clearMessage?: boolean; suppressErrorMessage?: boolean }) => {
     setIsLoading(true);
 
@@ -1193,21 +1231,19 @@ function AdministrationDashboardPage() {
         </article>
 
         <article className='adminMetricCard'>
-          <span className='adminMetricLabel'>Pendientes</span>
+          <span className='adminMetricLabel'>Programados</span>
           <strong className='adminMetricValue'>
-            {isLoadingChangeRequests ? '...' : String(pendingChangeRequests.length)}
+            {isLoadingServiceOrders ? '...' : String(totalProgrammedFilters)}
           </strong>
-          <p>Solicitudes de cambio que bloquean programacion hasta resolverse.</p>
+          <p>{`Meta total: ${totalPlannedFilters}. Restan ${totalRemainingToProgram} por programar.`}</p>
         </article>
 
         <article className='adminMetricCard'>
-          <span className='adminMetricLabel'>Bloqueadas</span>
+          <span className='adminMetricLabel'>Verificados</span>
           <strong className='adminMetricValue'>
-            {isLoadingServiceOrders
-              ? '...'
-              : String(serviceOrders.filter((serviceOrder) => serviceOrder.status === 'blocked').length)}
+            {isLoadingServiceOrders ? '...' : String(totalVerifiedFilters)}
           </strong>
-          <p>Ordenes actualmente detenidas por incidencia.</p>
+          <p>{`Pendientes por verificar: ${totalRemainingToVerify}. Solicitudes pendientes: ${pendingChangeRequests.length}.`}</p>
         </article>
       </div>
 
@@ -1250,14 +1286,14 @@ function AdministrationDashboardPage() {
         </div>
 
         <div className='adminTableWrapper'>
-          <table className='adminTable'>
+          <table className='adminTable adminServiceOrdersTable'>
             <thead>
               <tr>
                 <th>Folio</th>
                 <th>Tipo</th>
                 <th>Referencia</th>
                 <th>RFID Program</th>
-                <th>Cantidad</th>
+                <th>Cantidad / avance</th>
                 <th>Status</th>
                 <th>Ultima actualizacion</th>
                 <th>Acciones</th>
@@ -1266,13 +1302,13 @@ function AdministrationDashboardPage() {
             <tbody>
               {isLoadingServiceOrders ? (
                 <tr>
-                  <td colSpan={7} className='adminTableEmpty'>
+                  <td colSpan={8} className='adminTableEmpty'>
                     Cargando ordenes de servicio...
                   </td>
                 </tr>
               ) : serviceOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className='adminTableEmpty'>
+                  <td colSpan={8} className='adminTableEmpty'>
                     No hay ordenes de servicio registradas.
                   </td>
                 </tr>
@@ -1283,7 +1319,14 @@ function AdministrationDashboardPage() {
                     <td>{formatServiceOrderReadingMode(serviceOrder.readingMode)}</td>
                     <td>{formatServiceOrderPrimaryReference(serviceOrder)}</td>
                     <td>{serviceOrder.rfidProgram?.trim() || 'N/D'}</td>
-                    <td>{serviceOrder.quantity}</td>
+                    <td>
+                      <div className='adminOrderProgressCell'>
+                        <strong>{`Planeados: ${serviceOrder.quantity}`}</strong>
+                        <span>{`Programados: ${getServiceOrderProgrammedCount(serviceOrder)}`}</span>
+                        <span>{`Verificados: ${getServiceOrderVerifiedCount(serviceOrder)}`}</span>
+                        <small>{`Restan ${getServiceOrderRemainingToProgram(serviceOrder)} por programar y ${getServiceOrderRemainingToVerify(serviceOrder)} por verificar.`}</small>
+                      </div>
+                    </td>
                     <td>
                       <span
                         className={`adminBadge ${

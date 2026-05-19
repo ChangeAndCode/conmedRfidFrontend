@@ -403,6 +403,23 @@
     background-color: #fde8e8;
 }
 
+.adminOrderProgressCell {
+    display: grid;
+    gap: 4px;
+}
+
+.adminOrderProgressCell strong,
+.adminOrderProgressCell span,
+.adminOrderProgressCell small {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+}
+
+.adminOrderProgressCell small {
+    color: #51657f;
+}
+
 .adminTableEmpty {
     padding: 28px 0;
     text-align: center;
@@ -683,6 +700,48 @@
 .adminTable th:nth-child(5),
 .adminTable td:nth-child(5){
     width: 24%;
+}
+
+.adminServiceOrdersTable th:nth-child(1),
+.adminServiceOrdersTable td:nth-child(1){
+    width: 10%;
+}
+
+.adminServiceOrdersTable th:nth-child(2),
+.adminServiceOrdersTable td:nth-child(2){
+    width: 10%;
+}
+
+.adminServiceOrdersTable th:nth-child(3),
+.adminServiceOrdersTable td:nth-child(3){
+    width: 16%;
+}
+
+.adminServiceOrdersTable th:nth-child(4),
+.adminServiceOrdersTable td:nth-child(4){
+    width: 12%;
+}
+
+.adminServiceOrdersTable th:nth-child(5),
+.adminServiceOrdersTable td:nth-child(5){
+    width: 22%;
+    white-space: normal;
+}
+
+.adminServiceOrdersTable th:nth-child(6),
+.adminServiceOrdersTable td:nth-child(6){
+    width: 10%;
+}
+
+.adminServiceOrdersTable th:nth-child(7),
+.adminServiceOrdersTable td:nth-child(7){
+    width: 12%;
+    white-space: normal;
+}
+
+.adminServiceOrdersTable th:nth-child(8),
+.adminServiceOrdersTable td:nth-child(8){
+    width: 8%;
 }
 
 /* =========================================

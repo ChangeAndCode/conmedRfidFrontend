@@ -65,7 +65,6 @@ function ServiceOrderChangeRequestResolveModal({
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const folio = values.folio.trim();
     const readingMode = values.readingMode;
     const partNumber = values.partNumber.trim().toUpperCase();
     const gtin = values.gtin.trim();
@@ -74,8 +73,8 @@ function ServiceOrderChangeRequestResolveModal({
     const resolutionNotes = values.resolutionNotes.trim();
     const parsedQuantity = Number.parseInt(values.quantity.trim(), 10);
 
-    if (!folio || !values.quantity.trim()) {
-      setErrorMessage('Completa folio y cantidad.');
+    if (!values.quantity.trim()) {
+      setErrorMessage('Completa la cantidad.');
       return;
     }
 
@@ -108,7 +107,6 @@ function ServiceOrderChangeRequestResolveModal({
 
     try {
       await onSubmit({
-        folio,
         readingMode,
         partNumber: readingMode === 'manual' || readingMode === 'single_scan' ? partNumber : undefined,
         gtin: readingMode === 'double_scan' ? gtin : undefined,
@@ -147,14 +145,8 @@ function ServiceOrderChangeRequestResolveModal({
               <input
                 type='text'
                 value={values.folio}
-                onChange={(event) =>
-                  setValues((currentValues) => ({
-                    ...currentValues,
-                    folio: event.target.value,
-                  }))
-                }
-                disabled={isSubmitting}
-                required
+                disabled
+                readOnly
               />
             </label>
 

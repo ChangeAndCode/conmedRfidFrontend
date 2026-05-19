@@ -38,6 +38,8 @@ type SingleScanStep =
   | 'error';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+const PROGRAMMING_LIMIT_REACHED_MESSAGE =
+  'La orden de servicio seleccionada ya alcanzo la cantidad objetivo de programacion.';
 
 const formatGs1ManufactureDate = (value: string) => {
   if (!/^\d{6}$/.test(value)) {
@@ -56,6 +58,66 @@ const formatGs1ManufactureDate = (value: string) => {
 
   return `${fullYear}-${month}-${day}`;
 };
+
+const getServiceOrderProgrammedCount = (serviceOrder?: ServiceOrder | null) =>
+  serviceOrder?.programmedCount ?? 0;
+
+const getServiceOrderVerifiedCount = (serviceOrder?: ServiceOrder | null) =>
+  serviceOrder?.verifiedCount ?? 0;
+
+const getServiceOrderRemainingToProgram = (serviceOrder?: ServiceOrder | null) =>
+  Math.max(
+    serviceOrder?.remainingToProgram ??
+      ((serviceOrder?.quantity ?? 0) - getServiceOrderProgrammedCount(serviceOrder)),
+    0,
+  );
+
+const getServiceOrderRemainingToVerify = (serviceOrder?: ServiceOrder | null) =>
+  Math.max(
+    serviceOrder?.remainingToVerify ??
+      ((serviceOrder?.quantity ?? 0) - getServiceOrderVerifiedCount(serviceOrder)),
+    0,
+  );
+
+const hasServiceOrderProgrammingProgress = (serviceOrder?: ServiceOrder | null) =>
+  typeof serviceOrder?.remainingToProgram === 'number' ||
+  typeof serviceOrder?.programmedCount === 'number';
+
+const isServiceOrderProgrammingLimitReached = (serviceOrder?: ServiceOrder | null) =>
+  hasServiceOrderProgrammingProgress(serviceOrder) &&
+  getServiceOrderRemainingToProgram(serviceOrder) <= 0;
+
+const filterServiceOrdersWithProgrammingCapacity = (serviceOrders: ServiceOrder[]) =>
+  serviceOrders.filter(
+    (serviceOrder) => !isServiceOrderProgrammingLimitReached(serviceOrder),
+  );
+
+const markServiceOrderProgrammingLimitReached = (serviceOrder: ServiceOrder): ServiceOrder => ({
+  ...serviceOrder,
+  programmedCount: Math.max(
+    getServiceOrderProgrammedCount(serviceOrder),
+    serviceOrder.quantity,
+  ),
+  remainingToProgram: 0,
+  remainingToVerify: Math.max(
+    serviceOrder.quantity - getServiceOrderVerifiedCount(serviceOrder),
+    0,
+  ),
+});
+
+const markServiceOrderProgrammingLimitReachedInList = (
+  serviceOrders: ServiceOrder[],
+  serviceOrderId: string,
+) =>
+  serviceOrders.map((serviceOrder) =>
+    serviceOrder._id === serviceOrderId
+      ? markServiceOrderProgrammingLimitReached(serviceOrder)
+      : serviceOrder,
+  );
+
+const isProgrammingLimitReachedError = (error: unknown) =>
+  error instanceof Error &&
+  error.message.toLowerCase().includes('cantidad objetivo de programacion');
 
 function ProgrammingDashboardPage() {
   const navigate = useNavigate();
@@ -260,12 +322,17 @@ function ProgrammingDashboardPage() {
 
     try {
       const serviceOrders = await listOpenManualServiceOrders();
-      setManualServiceOrderOptions(serviceOrders);
+      const availableServiceOrders =
+        filterServiceOrdersWithProgrammingCapacity(serviceOrders);
+      setManualServiceOrderOptions(availableServiceOrders);
 
-      if (serviceOrders.length === 0) {
+      if (availableServiceOrders.length === 0) {
         setManualMessage({
           type: 'info',
-          text: 'No hay ordenes de servicio manuales abiertas disponibles.',
+          text:
+            serviceOrders.length === 0
+              ? 'No hay ordenes de servicio manuales abiertas disponibles.'
+              : 'Las ordenes manuales encontradas ya alcanzaron la cantidad objetivo de programacion.',
         });
         return;
       }
@@ -312,25 +379,33 @@ function ProgrammingDashboardPage() {
 
     try {
       const resolvedScan = await resolveSingleScan(trimmedRawScan);
-      const serviceOrders = await listOpenServiceOrdersByGtin(resolvedScan.gtin, 'single_scan');
+      const serviceOrders = await listOpenServiceOrdersByGtin(
+        resolvedScan.gtin,
+        'single_scan',
+      );
+      const availableServiceOrders =
+        filterServiceOrdersWithProgrammingCapacity(serviceOrders);
 
       setSingleScanRawValue(resolvedScan.rawScan);
       setSingleScanResolvedGtin(resolvedScan.gtin);
       setSingleScanResolvedLot(resolvedScan.lot ?? '');
       setSingleScanResolvedManufactureDate(resolvedScan.manufactureDate ?? '');
-      setSingleScanServiceOrderOptions(serviceOrders);
+      setSingleScanServiceOrderOptions(availableServiceOrders);
 
-      if (serviceOrders.length === 0) {
+      if (availableServiceOrders.length === 0) {
         setSingleScanStep('waiting_scan');
         setSingleScanMessage({
           type: 'error',
-          text: 'No hay ordenes de servicio single scan abiertas para el GTIN detectado.',
+          text:
+            serviceOrders.length === 0
+              ? 'No hay ordenes de servicio single scan abiertas para el GTIN detectado.'
+              : 'Las ordenes single scan detectadas ya alcanzaron la cantidad objetivo de programacion.',
         });
         return;
       }
 
-      if (serviceOrders.length === 1) {
-        const [singleServiceOrder] = serviceOrders;
+      if (availableServiceOrders.length === 1) {
+        const [singleServiceOrder] = availableServiceOrders;
         setSelectedSingleScanServiceOrderId(singleServiceOrder._id);
         await loadSingleScanPartOptionsForServiceOrder(singleServiceOrder._id);
         return;
@@ -551,6 +626,14 @@ function ProgrammingDashboardPage() {
       return;
     }
 
+    if (isServiceOrderProgrammingLimitReached(selectedManualServiceOrder)) {
+      setManualMessage({
+        type: 'error',
+        text: PROGRAMMING_LIMIT_REACHED_MESSAGE,
+      });
+      return;
+    }
+
     setIsSubmittingManual(true);
     setManualMessage(null);
 
@@ -586,6 +669,15 @@ function ProgrammingDashboardPage() {
         text: result?.message ?? 'Lectura manual registrada.',
       });
     } catch (error) {
+      if (isProgrammingLimitReachedError(error) && selectedManualServiceOrderId) {
+        setManualServiceOrderOptions((currentServiceOrders) =>
+          markServiceOrderProgrammingLimitReachedInList(
+            currentServiceOrders,
+            selectedManualServiceOrderId,
+          ),
+        );
+      }
+
       setManualMessage({
         type: 'error',
         text: error instanceof Error ? error.message : 'No se pudo conectar con el backend.',
@@ -663,6 +755,14 @@ function ProgrammingDashboardPage() {
       return;
     }
 
+    if (isServiceOrderProgrammingLimitReached(selectedSingleScanServiceOrder)) {
+      setSingleScanMessage({
+        type: 'error',
+        text: PROGRAMMING_LIMIT_REACHED_MESSAGE,
+      });
+      return;
+    }
+
     setIsSubmittingSingleScan(true);
     setSingleScanStep('submitting');
     setSingleScanMessage(null);
@@ -692,6 +792,15 @@ function ProgrammingDashboardPage() {
         });
       }, 2200);
     } catch (error) {
+      if (isProgrammingLimitReachedError(error) && selectedSingleScanServiceOrderId) {
+        setSingleScanServiceOrderOptions((currentServiceOrders) =>
+          markServiceOrderProgrammingLimitReachedInList(
+            currentServiceOrders,
+            selectedSingleScanServiceOrderId,
+          ),
+        );
+      }
+
       setSingleScanStep('ready_to_submit');
       setSingleScanMessage({
         type: 'error',
@@ -726,22 +835,27 @@ function ProgrammingDashboardPage() {
     try {
       const result = await resolveFirstDoubleScan(trimmedFirstBarcode);
       const matchingServiceOrders = await listOpenServiceOrdersByGtin(result.gtin);
+      const availableServiceOrders =
+        filterServiceOrdersWithProgrammingCapacity(matchingServiceOrders);
 
       setFirstBarcodeRaw(result.firstBarcodeRaw);
       setResolvedGtin(result.gtin);
-      setServiceOrderOptions(matchingServiceOrders);
+      setServiceOrderOptions(availableServiceOrders);
 
-      if (matchingServiceOrders.length === 0) {
+      if (availableServiceOrders.length === 0) {
         setDoubleScanStep('waiting_first');
         setDoubleScanMessage({
           type: 'error',
-          text: 'No hay ordenes de servicio abiertas para el GTIN detectado.',
+          text:
+            matchingServiceOrders.length === 0
+              ? 'No hay ordenes de servicio abiertas para el GTIN detectado.'
+              : 'Las ordenes detectadas ya alcanzaron la cantidad objetivo de programacion.',
         });
         return;
       }
 
-      if (matchingServiceOrders.length === 1) {
-        const [singleServiceOrder] = matchingServiceOrders;
+      if (availableServiceOrders.length === 1) {
+        const [singleServiceOrder] = availableServiceOrders;
         setSelectedServiceOrderId(singleServiceOrder._id);
         await loadPartConfigOptionsForServiceOrder(singleServiceOrder._id);
         return;
@@ -854,6 +968,14 @@ function ProgrammingDashboardPage() {
       return;
     }
 
+    if (isServiceOrderProgrammingLimitReached(selectedServiceOrder)) {
+      setDoubleScanMessage({
+        type: 'error',
+        text: PROGRAMMING_LIMIT_REACHED_MESSAGE,
+      });
+      return;
+    }
+
     setDoubleScanStep('submitting');
     setDoubleScanMessage(null);
     setDoubleScanResult(null);
@@ -884,6 +1006,15 @@ function ProgrammingDashboardPage() {
         });
       }, 2200);
     } catch (error) {
+      if (isProgrammingLimitReachedError(error) && selectedServiceOrderId) {
+        setServiceOrderOptions((currentServiceOrders) =>
+          markServiceOrderProgrammingLimitReachedInList(
+            currentServiceOrders,
+            selectedServiceOrderId,
+          ),
+        );
+      }
+
       setDoubleScanStep('waiting_second');
       setDoubleScanMessage({
         type: 'error',
@@ -997,7 +1128,12 @@ function ProgrammingDashboardPage() {
                   aria-label='partNumber'
                   value={partNumber}
                   onChange={(event) => setPartNumber(event.target.value)}
-                  disabled={!selectedManualServiceOrderId || isLoadingManualPartOptions || isSubmittingManual}
+                  disabled={
+                    !selectedManualServiceOrderId ||
+                    isLoadingManualPartOptions ||
+                    isSubmittingManual ||
+                    isServiceOrderProgrammingLimitReached(selectedManualServiceOrder)
+                  }
                   required
                 >
                   <option value=''>Selecciona</option>
@@ -1017,6 +1153,13 @@ function ProgrammingDashboardPage() {
                 <div className='scanSummaryBlock'>
                   <p>Orden seleccionada: {selectedManualServiceOrder.folio}</p>
                   <p>Cantidad planeada: {selectedManualServiceOrder.quantity}</p>
+                  <p>{`Programados: ${getServiceOrderProgrammedCount(selectedManualServiceOrder)}`}</p>
+                  <p>{`Verificados: ${getServiceOrderVerifiedCount(selectedManualServiceOrder)}`}</p>
+                  <p>{`Restan por programar: ${getServiceOrderRemainingToProgram(selectedManualServiceOrder)}`}</p>
+                  <p>{`Restan por verificar: ${getServiceOrderRemainingToVerify(selectedManualServiceOrder)}`}</p>
+                  {isServiceOrderProgrammingLimitReached(selectedManualServiceOrder) && (
+                    <p>{PROGRAMMING_LIMIT_REACHED_MESSAGE}</p>
+                  )}
                   {selectedManualServiceOrder.partNumber && (
                     <p>Numero de parte solicitado: {selectedManualServiceOrder.partNumber}</p>
                   )}
@@ -1063,7 +1206,13 @@ function ProgrammingDashboardPage() {
               <button
                 className='buttonSelector modalSubmitButton'
                 type='submit'
-                disabled={isSubmittingManual || !partNumber || !selectedManualServiceOrderId}
+                disabled={
+                  isSubmittingManual ||
+                  !partNumber ||
+                  !selectedManualServiceOrderId ||
+                  !selectedManualServiceOrder ||
+                  isServiceOrderProgrammingLimitReached(selectedManualServiceOrder)
+                }
               >
                 {isSubmittingManual ? 'Guardando...' : 'Ingresar valores'}
               </button>
@@ -1162,6 +1311,13 @@ function ProgrammingDashboardPage() {
                   <p>GTIN esperado: {selectedServiceOrder.gtin}</p>
                   <p>Programa RFID esperado: {selectedServiceOrder.rfidProgram}</p>
                   <p>Cantidad planeada: {selectedServiceOrder.quantity}</p>
+                  <p>{`Programados: ${getServiceOrderProgrammedCount(selectedServiceOrder)}`}</p>
+                  <p>{`Verificados: ${getServiceOrderVerifiedCount(selectedServiceOrder)}`}</p>
+                  <p>{`Restan por programar: ${getServiceOrderRemainingToProgram(selectedServiceOrder)}`}</p>
+                  <p>{`Restan por verificar: ${getServiceOrderRemainingToVerify(selectedServiceOrder)}`}</p>
+                  {isServiceOrderProgrammingLimitReached(selectedServiceOrder) && (
+                    <p>{PROGRAMMING_LIMIT_REACHED_MESSAGE}</p>
+                  )}
                 </div>
               )}
 
@@ -1173,7 +1329,10 @@ function ProgrammingDashboardPage() {
                     aria-label='partConfigId'
                     value={selectedPartConfigId}
                     onChange={(event) => handlePartConfigSelection(event.target.value)}
-                    disabled={isResolvingOrSubmitting}
+                    disabled={
+                      isResolvingOrSubmitting ||
+                      isServiceOrderProgrammingLimitReached(selectedServiceOrder)
+                    }
                     required
                   >
                     <option value=''>Selecciona un numero de parte</option>
@@ -1223,7 +1382,11 @@ function ProgrammingDashboardPage() {
                   onChange={(event) => setSecondBarcodeRaw(event.target.value)}
                   onKeyDown={(event) => void handleSecondBarcodeEnter(event)}
                   placeholder='Escanea el segundo codigo'
-                  disabled={!selectedPartConfigId || isResolvingOrSubmitting}
+                  disabled={
+                    !selectedPartConfigId ||
+                    isResolvingOrSubmitting ||
+                    isServiceOrderProgrammingLimitReached(selectedServiceOrder)
+                  }
                   autoComplete='off'
                 />
               </label>
@@ -1276,8 +1439,10 @@ function ProgrammingDashboardPage() {
                   disabled={
                     isResolvingOrSubmitting ||
                     !selectedServiceOrderId ||
+                    !selectedServiceOrder ||
                     !selectedPartConfigId ||
-                    !secondBarcodeRaw.trim()
+                    !secondBarcodeRaw.trim() ||
+                    isServiceOrderProgrammingLimitReached(selectedServiceOrder)
                   }
                 >
                   {doubleScanStep === 'submitting' ? 'Guardando...' : 'Registrar lectura'}
@@ -1405,6 +1570,13 @@ function ProgrammingDashboardPage() {
                 <div className='scanSummaryBlock'>
                   <p>Orden seleccionada: {selectedSingleScanServiceOrder.folio}</p>
                   <p>Cantidad planeada: {selectedSingleScanServiceOrder.quantity}</p>
+                  <p>{`Programados: ${getServiceOrderProgrammedCount(selectedSingleScanServiceOrder)}`}</p>
+                  <p>{`Verificados: ${getServiceOrderVerifiedCount(selectedSingleScanServiceOrder)}`}</p>
+                  <p>{`Restan por programar: ${getServiceOrderRemainingToProgram(selectedSingleScanServiceOrder)}`}</p>
+                  <p>{`Restan por verificar: ${getServiceOrderRemainingToVerify(selectedSingleScanServiceOrder)}`}</p>
+                  {isServiceOrderProgrammingLimitReached(selectedSingleScanServiceOrder) && (
+                    <p>{PROGRAMMING_LIMIT_REACHED_MESSAGE}</p>
+                  )}
                   {selectedSingleScanServiceOrder.partNumber && (
                     <p>Numero de parte solicitado: {selectedSingleScanServiceOrder.partNumber}</p>
                   )}
@@ -1422,7 +1594,11 @@ function ProgrammingDashboardPage() {
                     aria-label='singleScanPartNumber'
                     value={singleScanPartNumber}
                     onChange={(event) => handleSingleScanPartNumberSelection(event.target.value)}
-                    disabled={isLoadingSingleScanPartOptions || isSubmittingSingleScan}
+                    disabled={
+                      isLoadingSingleScanPartOptions ||
+                      isSubmittingSingleScan ||
+                      isServiceOrderProgrammingLimitReached(selectedSingleScanServiceOrder)
+                    }
                     required
                   >
                     <option value=''>Selecciona</option>
@@ -1520,12 +1696,14 @@ function ProgrammingDashboardPage() {
                     isLoadingSingleScanPartOptions ||
                     !singleScanPartNumber ||
                     !selectedSingleScanServiceOrderId ||
+                    !selectedSingleScanServiceOrder ||
                     !singleScanRawValue.trim() ||
                     singleScanStep === 'resolving_scan' ||
                     singleScanStep === 'selecting_service_order' ||
                     singleScanStep === 'resolving_part_configs' ||
                     singleScanStep === 'selecting_part_config' ||
-                    singleScanStep === 'success'
+                    singleScanStep === 'success' ||
+                    isServiceOrderProgrammingLimitReached(selectedSingleScanServiceOrder)
                   }
                 >
                   {singleScanStep === 'submitting' ? 'Guardando...' : 'Registrar lectura'}
