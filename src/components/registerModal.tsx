@@ -80,7 +80,7 @@ function RegisterModal({ onClose, onSuccess }: RegisterModalProps) {
             </div>
 
             <label className='modalField'>
-              <span>Username</span>
+              <span>Usuario</span>
               <input
                 type='text'
                 value={formValues.username}
@@ -98,7 +98,7 @@ function RegisterModal({ onClose, onSuccess }: RegisterModalProps) {
             </label>
 
             <label className='modalField'>
-              <span>Email</span>
+              <span>Correo electrónico</span>
               <input
                 type='email'
                 value={formValues.email}
@@ -115,7 +115,7 @@ function RegisterModal({ onClose, onSuccess }: RegisterModalProps) {
               />
             </label>
 
-            <label className='modalField'>
+            <label className='modalFieldUser'>
               <span>Rol</span>
               <select
                 value={formValues.role}
@@ -134,11 +134,11 @@ function RegisterModal({ onClose, onSuccess }: RegisterModalProps) {
             </label>
 
             <label className='modalField'>
-              <span>Password</span>
+              <span>Contraseña</span>
               <input
                 type='password'
                 value={formValues.password}
-                placeholder='12345678'
+                placeholder='Crea una contraseña'
                 autoComplete='new-password'
                 minLength={8}
                 onChange={(event) =>
@@ -153,11 +153,11 @@ function RegisterModal({ onClose, onSuccess }: RegisterModalProps) {
             </label>
 
             <label className='modalField'>
-              <span>Confirmar Password</span>
+              <span>Confirmar contraseña</span>
               <input
                 type='password'
                 value={formValues.confirmPassword}
-                placeholder='12345678'
+                placeholder='Confirma la nueva contraseña'
                 autoComplete='new-password'
                 minLength={8}
                 onChange={(event) =>
@@ -173,12 +173,12 @@ function RegisterModal({ onClose, onSuccess }: RegisterModalProps) {
 
             {errorMessage && <p className='modalMessage error'>{errorMessage}</p>}
 
-            <div>
-              <button className='buttonSelector' type='submit' disabled={isSubmitting}>
-                {isSubmitting ? 'Registrando...' : 'Registrar'}
+            <div className='adminToolbarActions'>
+              <button className='adminPrimaryButton' type='submit' disabled={isSubmitting}>
+                {isSubmitting ? 'Registrando...' : 'Registrar usuario'}
               </button>
-              <button className='buttonSelector' type='button' onClick={onClose} disabled={isSubmitting}>
-                Cerrar
+              <button className='adminPrimaryButton' type='button' onClick={onClose} disabled={isSubmitting}>
+                Cancelar
               </button>
             </div>
           </form>
