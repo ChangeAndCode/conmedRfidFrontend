@@ -61,6 +61,26 @@ export async function listServiceOrders(filters?: {
   return result?.data ?? [];
 }
 
+export async function getServiceOrderById(id: string): Promise<ServiceOrder> {
+  const response = await fetch(`${API_URL}/api/service-orders/${id}`, {
+    headers: buildAuthHeaders(),
+  });
+
+  const result = (await response.json().catch(() => null)) as
+    | { message?: string; data?: ServiceOrder }
+    | null;
+
+  if (!response.ok) {
+    throw new Error(result?.message ?? 'No se pudo consultar la orden de servicio.');
+  }
+
+  if (!result?.data) {
+    throw new Error('La respuesta del backend no incluye la orden de servicio solicitada.');
+  }
+
+  return result.data;
+}
+
 export async function createServiceOrder(
   payload: ServiceOrderMutationPayload,
 ): Promise<ServiceOrderMutationResponse> {

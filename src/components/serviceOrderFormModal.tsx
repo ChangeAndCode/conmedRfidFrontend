@@ -69,6 +69,26 @@ const getFolioPrefixByReadingMode = (readingMode: ServiceOrderReadingMode) => {
   }
 };
 
+const getServiceOrderProgrammedCount = (serviceOrder?: Partial<ServiceOrder>) =>
+  serviceOrder?.programmedCount ?? 0;
+
+const getServiceOrderVerifiedCount = (serviceOrder?: Partial<ServiceOrder>) =>
+  serviceOrder?.verifiedCount ?? 0;
+
+const getServiceOrderRemainingToProgram = (serviceOrder?: Partial<ServiceOrder>) =>
+  Math.max(
+    serviceOrder?.remainingToProgram ??
+      ((serviceOrder?.quantity ?? 0) - getServiceOrderProgrammedCount(serviceOrder)),
+    0,
+  );
+
+const getServiceOrderRemainingToVerify = (serviceOrder?: Partial<ServiceOrder>) =>
+  Math.max(
+    serviceOrder?.remainingToVerify ??
+      ((serviceOrder?.quantity ?? 0) - getServiceOrderVerifiedCount(serviceOrder)),
+    0,
+  );
+
 function ServiceOrderFormModal({
   title,
   submitLabel,
@@ -109,6 +129,10 @@ function ServiceOrderFormModal({
     !activeRfidPrograms.some((rfidProgram) => rfidProgram.value === values.rfidProgram);
   const partNumberOrderLabel =
     values.readingMode === 'single_scan' ? 'single scan con Expected GTIN' : 'manual';
+  const programmedCount = getServiceOrderProgrammedCount(initialData);
+  const verifiedCount = getServiceOrderVerifiedCount(initialData);
+  const minimumQuantityAllowed = Math.max(programmedCount, verifiedCount, 1);
+  const showProgressSummary = isEditMode && Boolean(initialData);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -164,6 +188,13 @@ function ServiceOrderFormModal({
 
     if (Number.isNaN(parsedQuantity) || parsedQuantity <= 0) {
       setErrorMessage('La cantidad debe ser un entero positivo.');
+      return;
+    }
+
+    if (isEditMode && parsedQuantity < minimumQuantityAllowed) {
+      setErrorMessage(
+        `La cantidad no puede ser menor que ${minimumQuantityAllowed} porque la orden ya acumula ${programmedCount} programados y ${verifiedCount} verificados.`,
+      );
       return;
     }
 
@@ -340,7 +371,7 @@ function ServiceOrderFormModal({
               <span>Cantidad</span>
               <input
                 type='number'
-                min='1'
+                min={String(minimumQuantityAllowed)}
                 step='1'
                 value={values.quantity}
                 onChange={(event) =>
@@ -390,6 +421,12 @@ function ServiceOrderFormModal({
               />
             </label>
           </div>
+
+          {showProgressSummary && (
+            <div className='adminMessage info'>
+              {`Avance actual: ${programmedCount} programados, ${verifiedCount} verificados, ${getServiceOrderRemainingToProgram(initialData)} pendientes por programar y ${getServiceOrderRemainingToVerify(initialData)} pendientes por verificar. La cantidad no puede bajar de ${minimumQuantityAllowed}.`}
+            </div>
+          )}
 
           <p className='adminFieldHint'>
             Las ordenes manuales se amarran a un numero de parte. Las de single scan requieren un

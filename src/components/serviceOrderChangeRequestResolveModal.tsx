@@ -40,6 +40,26 @@ const getRequestTypeLabel = (requestType: ServiceOrderChangeRequest['requestType
   }
 };
 
+const getServiceOrderProgrammedCount = (serviceOrder: ServiceOrder) =>
+  serviceOrder.programmedCount ?? 0;
+
+const getServiceOrderVerifiedCount = (serviceOrder: ServiceOrder) =>
+  serviceOrder.verifiedCount ?? 0;
+
+const getServiceOrderRemainingToProgram = (serviceOrder: ServiceOrder) =>
+  Math.max(
+    serviceOrder.remainingToProgram ??
+      (serviceOrder.quantity - getServiceOrderProgrammedCount(serviceOrder)),
+    0,
+  );
+
+const getServiceOrderRemainingToVerify = (serviceOrder: ServiceOrder) =>
+  Math.max(
+    serviceOrder.remainingToVerify ??
+      (serviceOrder.quantity - getServiceOrderVerifiedCount(serviceOrder)),
+    0,
+  );
+
 function ServiceOrderChangeRequestResolveModal({
   serviceOrder,
   changeRequest,
@@ -61,6 +81,9 @@ function ServiceOrderChangeRequestResolveModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isPartNumberBasedOrder =
     values.readingMode === 'manual' || values.readingMode === 'single_scan';
+  const programmedCount = getServiceOrderProgrammedCount(serviceOrder);
+  const verifiedCount = getServiceOrderVerifiedCount(serviceOrder);
+  const minimumQuantityAllowed = Math.max(programmedCount, verifiedCount, 1);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -99,6 +122,13 @@ function ServiceOrderChangeRequestResolveModal({
 
     if (Number.isNaN(parsedQuantity) || parsedQuantity <= 0) {
       setErrorMessage('La cantidad debe ser un entero positivo.');
+      return;
+    }
+
+    if (parsedQuantity < minimumQuantityAllowed) {
+      setErrorMessage(
+        `La cantidad no puede ser menor que ${minimumQuantityAllowed} porque la orden ya acumula ${programmedCount} programados y ${verifiedCount} verificados.`,
+      );
       return;
     }
 
@@ -233,7 +263,7 @@ function ServiceOrderChangeRequestResolveModal({
               <span>Cantidad</span>
               <input
                 type='number'
-                min='1'
+                min={String(minimumQuantityAllowed)}
                 step='1'
                 value={values.quantity}
                 onChange={(event) =>
@@ -294,6 +324,10 @@ function ServiceOrderChangeRequestResolveModal({
                 rows={3}
               />
             </label>
+          </div>
+
+          <div className='adminMessage info'>
+            {`Avance actual: ${programmedCount} programados, ${verifiedCount} verificados, ${getServiceOrderRemainingToProgram(serviceOrder)} pendientes por programar y ${getServiceOrderRemainingToVerify(serviceOrder)} pendientes por verificar. La cantidad no puede bajar de ${minimumQuantityAllowed}.`}
           </div>
 
           {errorMessage && <div className='adminMessage error'>{errorMessage}</div>}

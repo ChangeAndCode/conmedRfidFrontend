@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import AppSceneLayout from '../../components/appSceneLayout';
 import { useAuth } from '../../context/useAuth';
 import '../../css/verificationDashboard.css';
+import { getServiceOrderById } from '../../services/serviceOrderService';
 import {
   resolveProgrammingRecord,
   verifyProgrammingRecord,
@@ -15,6 +16,7 @@ import type {
   ResolveProgrammingRecordResult,
   VerifyProgrammingRecordPayload,
 } from '../../types/ProgrammingRecord';
+import type { ServiceOrder } from '../../types/ServiceOrder';
 
 type FeedbackMessage = {
   type: 'success' | 'error' | 'info';
@@ -120,6 +122,39 @@ const formatGs1ManufactureDate = (value?: string) => {
   return `${fullYear}-${month}-${day}`;
 };
 
+const formatServiceOrderStatus = (status: ServiceOrder['status']) => {
+  switch (status) {
+    case 'open':
+      return 'Open';
+    case 'blocked':
+      return 'Blocked';
+    case 'closed':
+      return 'Closed';
+    default:
+      return status;
+  }
+};
+
+const getServiceOrderProgrammedCount = (serviceOrder?: ServiceOrder | null) =>
+  serviceOrder?.programmedCount ?? 0;
+
+const getServiceOrderVerifiedCount = (serviceOrder?: ServiceOrder | null) =>
+  serviceOrder?.verifiedCount ?? 0;
+
+const getServiceOrderRemainingToProgram = (serviceOrder?: ServiceOrder | null) =>
+  Math.max(
+    serviceOrder?.remainingToProgram ??
+      ((serviceOrder?.quantity ?? 0) - getServiceOrderProgrammedCount(serviceOrder)),
+    0,
+  );
+
+const getServiceOrderRemainingToVerify = (serviceOrder?: ServiceOrder | null) =>
+  Math.max(
+    serviceOrder?.remainingToVerify ??
+      ((serviceOrder?.quantity ?? 0) - getServiceOrderVerifiedCount(serviceOrder)),
+    0,
+  );
+
 function ValidationDashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -132,13 +167,37 @@ function ValidationDashboardPage() {
   const [selectedProgrammingRecordId, setSelectedProgrammingRecordId] = useState<string | null>(null);
   const [isResolving, setIsResolving] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [relatedServiceOrder, setRelatedServiceOrder] = useState<ServiceOrder | null>(null);
+  const [isLoadingRelatedServiceOrder, setIsLoadingRelatedServiceOrder] = useState(false);
+  const [relatedServiceOrderError, setRelatedServiceOrderError] = useState<string | null>(null);
 
   const selectedProgrammingRecord =
     resolution?.candidates.find((candidate) => candidate._id === selectedProgrammingRecordId) ?? null;
 
+  const loadRelatedServiceOrder = async (serviceOrderId: string) => {
+    setIsLoadingRelatedServiceOrder(true);
+    setRelatedServiceOrderError(null);
+
+    try {
+      const nextServiceOrder = await getServiceOrderById(serviceOrderId);
+      setRelatedServiceOrder(nextServiceOrder);
+    } catch (error) {
+      setRelatedServiceOrder(null);
+      setRelatedServiceOrderError(
+        error instanceof Error
+          ? error.message
+          : 'No se pudo consultar el estado de la orden de servicio.',
+      );
+    } finally {
+      setIsLoadingRelatedServiceOrder(false);
+    }
+  };
+
   const resetResolutionState = () => {
     setResolution(null);
     setSelectedProgrammingRecordId(null);
+    setRelatedServiceOrder(null);
+    setRelatedServiceOrderError(null);
   };
 
   const resetFormForMode = (nextMode: ProgrammingRecordMode) => {
@@ -170,6 +229,19 @@ function ValidationDashboardPage() {
       };
     });
   }, [user?.username]);
+
+  useEffect(() => {
+    const serviceOrderId = selectedProgrammingRecord?.serviceOrderId;
+
+    if (!serviceOrderId) {
+      setRelatedServiceOrder(null);
+      setRelatedServiceOrderError(null);
+      setIsLoadingRelatedServiceOrder(false);
+      return;
+    }
+
+    void loadRelatedServiceOrder(serviceOrderId);
+  }, [selectedProgrammingRecord?.serviceOrderId]);
 
   const buildResolvePayload = (): ResolveProgrammingRecordPayload => {
     if (mode === 'manual') {
@@ -331,6 +403,11 @@ function ValidationDashboardPage() {
       });
 
       setSelectedProgrammingRecordId(result.data._id);
+
+      if (result.data.serviceOrderId) {
+        await loadRelatedServiceOrder(result.data.serviceOrderId);
+      }
+
       setMessage({
         type: 'success',
         text: result.message,
@@ -766,6 +843,61 @@ function ValidationDashboardPage() {
                       </div>
                     </div>
                   </div>
+
+                  {(selectedProgrammingRecord.serviceOrderId || relatedServiceOrderError) && (
+                    <div className='verificationSelectedRecordCard'>
+                      <div className='verificationSelectedRecordHeader'>
+                        <div>
+                          <h3>Orden de servicio</h3>
+                          <p>{selectedProgrammingRecord.serviceOrderFolio || 'Sin folio'}</p>
+                        </div>
+                        {relatedServiceOrder && (
+                          <span
+                            className={`verificationStatusBadge ${
+                              relatedServiceOrder.status === 'closed' ? 'verified' : 'programmed'
+                            }`}
+                          >
+                            {formatServiceOrderStatus(relatedServiceOrder.status)}
+                          </span>
+                        )}
+                      </div>
+
+                      {isLoadingRelatedServiceOrder ? (
+                        <p className='verificationHint'>Consultando avance real de la orden...</p>
+                      ) : relatedServiceOrder ? (
+                        <div className='verificationKeyValueGrid'>
+                          <div>
+                            <span>Quantity</span>
+                            <strong>{relatedServiceOrder.quantity}</strong>
+                          </div>
+                          <div>
+                            <span>Programmed</span>
+                            <strong>{getServiceOrderProgrammedCount(relatedServiceOrder)}</strong>
+                          </div>
+                          <div>
+                            <span>Verified</span>
+                            <strong>{getServiceOrderVerifiedCount(relatedServiceOrder)}</strong>
+                          </div>
+                          <div>
+                            <span>Remaining to program</span>
+                            <strong>{getServiceOrderRemainingToProgram(relatedServiceOrder)}</strong>
+                          </div>
+                          <div>
+                            <span>Remaining to verify</span>
+                            <strong>{getServiceOrderRemainingToVerify(relatedServiceOrder)}</strong>
+                          </div>
+                          <div>
+                            <span>Updated at</span>
+                            <strong>{formatDateTime(relatedServiceOrder.updatedAt)}</strong>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className='verificationHint'>
+                          {relatedServiceOrderError ?? 'No se pudo consultar la orden de servicio.'}
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   <div className='verificationActionRow'>
                     <button
