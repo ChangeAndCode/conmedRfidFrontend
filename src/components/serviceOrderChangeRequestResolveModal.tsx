@@ -163,7 +163,7 @@ function ServiceOrderChangeRequestResolveModal({
             <h2>{`Resolver ${changeRequest.serviceOrderFolio}`}</h2>
             <p>{`Motivo: ${getRequestTypeLabel(changeRequest.requestType)}.`}</p>
           </div>
-          <button className='buttonSelector' type='button' onClick={onClose} disabled={isSubmitting}>
+          <button className='adminPrimaryButton adminSecondaryButton' type='button' onClick={onClose} disabled={isSubmitting}>
             Cerrar
           </button>
         </div>
@@ -333,10 +333,10 @@ function ServiceOrderChangeRequestResolveModal({
           {errorMessage && <div className='adminMessage error'>{errorMessage}</div>}
 
           <div className='adminModalFooter'>
-            <button className='buttonSelector' type='button' onClick={onClose} disabled={isSubmitting}>
+            <button className='adminPrimaryButton adminSecondaryButton' type='button' onClick={onClose} disabled={isSubmitting}>
               Cancelar
             </button>
-            <button className='buttonSelector' type='submit' disabled={isSubmitting}>
+            <button className='adminPrimaryButton' type='submit' disabled={isSubmitting}>
               {isSubmitting ? 'Resolviendo...' : 'Resolver solicitud'}
             </button>
           </div>
