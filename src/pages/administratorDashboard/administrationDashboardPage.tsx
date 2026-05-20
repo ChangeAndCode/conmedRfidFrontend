@@ -10,6 +10,7 @@ import RegisterModal from '../../components/registerModal';
 import RfidProgramFormModal from '../../components/rfidProgramFormModal';
 import ServiceOrderChangeRequestResolveModal from '../../components/serviceOrderChangeRequestResolveModal';
 import ServiceOrderFormModal from '../../components/serviceOrderFormModal';
+import ServiceOrderReportModal from '../../components/serviceOrderReportModal';
 import '../../css/administratorDashboard.css';
 import { useAuth } from '../../context/useAuth';
 import {
@@ -112,17 +113,17 @@ const ADMIN_SECTIONS: AdminSectionDefinition[] = [
   {
     id: 'gtin',
     label: 'GTIN',
-    description: 'Espacio reservado para futuras herramientas de GTIN.',
+    description: 'Catálogo de GTIN disponibles para numeros de parte.',
   },
   {
     id: 'rfidProgram',
     label: 'RFID Program',
-    description: 'Espacio reservado para futuras herramientas de programas RFID.',
+    description: 'Catálogo del Programa RFID disponibles para numeros de parte.',
   },
   {
     id: 'users',
     label: 'Usuarios',
-    description: 'Registro y administracion basica de usuarios.',
+    description: 'Administra usuarios registrados, permisos de acceso y eliminación.',
   },
 ];
 
@@ -130,7 +131,7 @@ const SUPERVISOR_SECTIONS: AdminSectionDefinition[] = [
   {
     id: 'serviceOrder',
     label: 'Orden de servicio',
-    description: 'Crea, edita y resuelve incidencias de ordenes de servicio.',
+    description: 'El supervisor crea, ajusta y desbloquea ordenes desde esta vista.',
   },
 ];
 
@@ -260,6 +261,10 @@ function AdministrationDashboardPage() {
   const [isLoadingProgrammingRecords, setIsLoadingProgrammingRecords] = useState(false);
   const [isCreateServiceOrderModalOpen, setIsCreateServiceOrderModalOpen] = useState(false);
   const [editingServiceOrder, setEditingServiceOrder] = useState<ServiceOrder | null>(null);
+  const [reportingServiceOrder, setReportingServiceOrder] = useState<ServiceOrder | null>(null);
+  const [reportRequestType, setReportRequestType] =
+    useState<ServiceOrderChangeRequest['requestType']>('missing_product');
+  const [reportNotes, setReportNotes] = useState('');
   const [resolvingChangeRequest, setResolvingChangeRequest] =
     useState<ServiceOrderChangeRequest | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAdminAction | null>(null);
@@ -680,6 +685,57 @@ function AdministrationDashboardPage() {
     }
   };
 
+  const handleCreateLocalChangeRequest = () => {
+    if (!reportingServiceOrder) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const nextChangeRequest = {
+      _id: `local-${reportingServiceOrder._id}-${Date.now()}`,
+      serviceOrderId: reportingServiceOrder._id,
+      serviceOrderFolio: reportingServiceOrder.folio,
+      requestType: reportRequestType,
+      status: 'pending',
+      createdAt: now,
+      updatedAt: now,
+      resolutionNotes: reportNotes.trim(),
+    } as ServiceOrderChangeRequest;
+
+    setChangeRequests((currentRequests) => [nextChangeRequest, ...currentRequests]);
+    setReportingServiceOrder(null);
+    setReportRequestType('missing_product');
+    setReportNotes('');
+    setMessage({
+      type: 'success',
+      text: `Solicitud creada para la orden ${reportingServiceOrder.folio}.`,
+    });
+  };
+
+  const handleMarkServiceOrderAsResolved = (serviceOrder: ServiceOrder) => {
+    const now = new Date().toISOString();
+
+    const nextResolvedRequest = {
+      _id: `resolved-${serviceOrder._id}-${Date.now()}`,
+      serviceOrderId: serviceOrder._id,
+      serviceOrderFolio: serviceOrder.folio,
+      requestType: 'missing_product',
+      status: 'resolved',
+      createdAt: now,
+      updatedAt: now,
+      resolvedAt: now,
+      resolvedByUsername: user?.username ?? 'Supervisor',
+      resolutionNotes: 'Orden marcada como resuelta.',
+    } as ServiceOrderChangeRequest;
+
+    setChangeRequests((currentRequests) => [nextResolvedRequest, ...currentRequests]);
+
+    setMessage({
+      type: 'success',
+      text: `La orden ${serviceOrder.folio} fue marcada como resuelta.`,
+    });
+  };
+
   const handleCopyPartConfig = async (payload: PartConfigMutationPayload) => {
     if (!copyingPartConfig) {
       throw new Error('No se encontro la configuracion que se quiere copiar.');
@@ -936,10 +992,6 @@ function AdministrationDashboardPage() {
   const renderPartNumbersSection = () => (
     <section className='adminSectionStack'>
       <div className='adminToolbar'>
-        <div>
-          <h2>Numeros de parte</h2>
-          <p>Mostrando datos reales del backend.</p>
-        </div>
 
         <div className='adminToolbarActions'>
           <button
@@ -1071,10 +1123,6 @@ function AdministrationDashboardPage() {
   const renderGtinsSection = () => (
     <section className='adminSectionStack'>
       <div className='adminToolbar'>
-        <div>
-          <h2>GTIN</h2>
-          <p>Catalogo de GTIN disponibles para numeros de parte.</p>
-        </div>
 
         <div className='adminToolbarActions'>
           <button
@@ -1191,10 +1239,6 @@ function AdministrationDashboardPage() {
   const renderRfidProgramsSection = () => (
     <section className='adminSectionStack'>
       <div className='adminToolbar'>
-        <div>
-          <h2>RFID Program</h2>
-          <p>Catalogo de RFID Program disponibles para numeros de parte.</p>
-        </div>
 
         <div className='adminToolbarActions'>
           <button
@@ -1339,10 +1383,6 @@ function AdministrationDashboardPage() {
       </div>
 
       <div className='adminToolbar'>
-        <div>
-          <h2>Ordenes de servicio</h2>
-          <p>El supervisor crea, ajusta y desbloquea ordenes desde esta vista.</p>
-        </div>
 
         <div className='adminToolbarActions'>
           <button
@@ -1431,14 +1471,41 @@ function AdministrationDashboardPage() {
                     <td>
                       <div className='adminActionRow adminIconActionRow'>
                         <button
-                          className='adminActionButton'
+                          className='adminActionButton adminIconActionButton'
                           type='button'
+                          title='Editar orden'
                           onClick={() => {
                             setMessage(null);
                             setEditingServiceOrder(serviceOrder);
                           }}
                         >
                           ✎
+                        </button>
+
+                        <button
+                          className='adminActionButton adminIconActionButton'
+                          type='button'
+                          title='Reportar incidencia'
+                          onClick={() => {
+                            setMessage(null);
+                            setReportingServiceOrder(serviceOrder);
+                            setReportRequestType('missing_product');
+                            setReportNotes('');
+                          }}
+                        >
+                          ⚠
+                        </button>
+
+                        <button
+                          className='adminActionButton adminIconActionButton'
+                          type='button'
+                          title='Marcar como resuelto'
+                          onClick={() => {
+                            setMessage(null);
+                            handleMarkServiceOrderAsResolved(serviceOrder);
+                          }}
+                        >
+                          ✔
                         </button>
                       </div>
                     </td>
@@ -1459,11 +1526,12 @@ function AdministrationDashboardPage() {
         </div>
 
         <div className='adminTableWrapper'>
-          <table className='adminTable'>
+          <table className='adminTable adminPendingRequestsTable'>
             <thead>
               <tr>
                 <th>Folio</th>
                 <th>Motivo</th>
+                <th>Notas</th>
                 <th>Fecha</th>
                 <th>Status</th>
                 <th>Acciones</th>
@@ -1472,13 +1540,13 @@ function AdministrationDashboardPage() {
             <tbody>
               {isLoadingChangeRequests ? (
                 <tr>
-                  <td colSpan={5} className='adminTableEmpty'>
+                  <td colSpan={6} className='adminTableEmpty'>
                     Cargando solicitudes...
                   </td>
                 </tr>
               ) : pendingChangeRequests.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className='adminTableEmpty'>
+                  <td colSpan={6} className='adminTableEmpty'>
                     No hay solicitudes pendientes.
                   </td>
                 </tr>
@@ -1487,6 +1555,7 @@ function AdministrationDashboardPage() {
                   <tr key={changeRequest._id}>
                     <td>{changeRequest.serviceOrderFolio}</td>
                     <td>{formatChangeRequestType(changeRequest.requestType)}</td>
+                    <td>{changeRequest.resolutionNotes?.trim() || 'Sin notas'}</td>
                     <td>{formatDate(changeRequest.createdAt)}</td>
                     <td>
                       <span className='adminBadge inactive'>Pending</span>
@@ -1549,7 +1618,7 @@ function AdministrationDashboardPage() {
                 resolvedChangeRequests.map((changeRequest) => (
                   <tr key={changeRequest._id}>
                     <td>{changeRequest.serviceOrderFolio}</td>
-                    <td>{formatChangeRequestType(changeRequest.requestType)}</td>
+                    <td>{changeRequest._id.startsWith('resolved-') ? 'Completado' : formatChangeRequestType(changeRequest.requestType)}</td>
                     <td>{changeRequest.resolvedByUsername ?? 'N/D'}</td>
                     <td>{formatDate(changeRequest.resolvedAt ?? changeRequest.updatedAt)}</td>
                     <td>{changeRequest.resolutionNotes?.trim() || 'Sin notas'}</td>
@@ -1588,10 +1657,6 @@ function AdministrationDashboardPage() {
       </article>
 
       <div className='adminToolbar'>
-        <div>
-          <h2>Usuarios</h2>
-          <p>Administra usuarios registrados, permisos de acceso y eliminacion.</p>
-        </div>
 
         <div className='adminToolbarActions'>
           <button
@@ -1924,6 +1989,22 @@ function AdministrationDashboardPage() {
           copySourcePartNumber={copyingPartConfig.partNumber}
           onClose={() => setCopyingPartConfig(null)}
           onSubmit={handleCopyPartConfig}
+        />
+      )}
+
+      {reportingServiceOrder && (
+        <ServiceOrderReportModal
+          serviceOrder={reportingServiceOrder}
+          requestType={reportRequestType}
+          notes={reportNotes}
+          onRequestTypeChange={setReportRequestType}
+          onNotesChange={setReportNotes}
+          onClose={() => {
+            setReportingServiceOrder(null);
+            setReportRequestType('missing_product');
+            setReportNotes('');
+          }}
+          onSubmit={handleCreateLocalChangeRequest}
         />
       )}
 
