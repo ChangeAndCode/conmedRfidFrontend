@@ -334,13 +334,14 @@ function ProgrammingDashboardPage() {
               ? 'No hay ordenes de servicio manuales abiertas disponibles.'
               : 'Las ordenes manuales encontradas ya alcanzaron la cantidad objetivo de programacion.',
         });
-        return;
+        return true;
       }
 
       setManualMessage({
         type: 'info',
         text: 'Selecciona primero la orden de servicio manual.',
       });
+      return true;
     } catch (error) {
       setManualMessage({
         type: 'error',
@@ -349,6 +350,7 @@ function ProgrammingDashboardPage() {
             ? error.message
             : 'No se pudieron cargar las ordenes de servicio manuales.',
       });
+      return false;
     } finally {
       setIsLoadingManualServiceOrders(false);
     }
@@ -638,6 +640,7 @@ function ProgrammingDashboardPage() {
     setManualMessage(null);
 
     try {
+      const verificationReference = selectedManualServiceOrder?.folio?.trim() || undefined;
       const payload = {
         serviceOrderId: selectedManualServiceOrderId,
         partNumber,
@@ -645,7 +648,7 @@ function ProgrammingDashboardPage() {
         manufactureDate: trimmedManufactureDate || undefined,
         rfidProgram: selectedManualConfig?.rfidProgram,
         filterLabel: selectedManualConfig?.filterLabel,
-        rawReference: 'manual',
+        rawReference: verificationReference,
         notes: 'captura manual',
       };
 
@@ -663,11 +666,18 @@ function ProgrammingDashboardPage() {
         throw new Error(result?.message ?? 'Error al guardar la lectura manual.');
       }
 
-      resetManualForm();
-      setManualMessage({
-        type: 'success',
-        text: result?.message ?? 'Lectura manual registrada.',
-      });
+      setLot('');
+      setManufactureDate('');
+      const didReloadManualServiceOrders = await loadManualServiceOrders();
+
+      if (didReloadManualServiceOrders) {
+        setManualMessage({
+          type: 'success',
+          text:
+            result?.message ??
+            `Lectura manual registrada. Usa el folio ${selectedManualServiceOrder?.folio ?? ''} o el numero de parte para verificarla.`,
+        });
+      }
     } catch (error) {
       if (isProgrammingLimitReachedError(error) && selectedManualServiceOrderId) {
         setManualServiceOrderOptions((currentServiceOrders) =>
@@ -1163,6 +1173,7 @@ function ProgrammingDashboardPage() {
                   {selectedManualServiceOrder.partNumber && (
                     <p>Numero de parte solicitado: {selectedManualServiceOrder.partNumber}</p>
                   )}
+                  <p>{`Referencia sugerida para verificacion: ${selectedManualServiceOrder.folio}`}</p>
                   {selectedManualServiceOrder.rfidProgram && (
                     <p>Programa RFID esperado: {selectedManualServiceOrder.rfidProgram}</p>
                   )}

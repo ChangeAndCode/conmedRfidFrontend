@@ -118,7 +118,7 @@ export async function verifyProgrammingRecord(
     throw new Error(result?.message ?? 'No se pudo verificar la programacion.');
   }
 
-  if (!result?.data) {
+  if (!result?.data?.programmingRecord) {
     throw new Error('La respuesta del backend no incluye el programming record verificado.');
   }
 

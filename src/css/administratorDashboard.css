@@ -779,24 +779,22 @@
     color: #ffffff;
     background: linear-gradient(90deg, #145ed8 0%, #169fdf 100%);
 }
-<<<<<<< HEAD
-=======
 
 /* =========================================
    Information Table Styles Users
 ========================================= */
 
 .adminUsersTable {
-  table-layout: fixed;
-  width: 100%;
-  min-width: 0;
+    table-layout: fixed;
+    width: 100%;
+    min-width: 0;
 }
 
 .adminUsersTable th,
 .adminUsersTable td {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .adminUsersTable th:nth-child(1), .adminUsersTable td:nth-child(1) { width: 18%; }
@@ -807,20 +805,136 @@
 
 .adminUsersTable th:nth-child(6),
 .adminUsersTable td:nth-child(6) {
-  width: 14%;
-  text-align: center;
+    width: 14%;
+    text-align: center;
 }
 
 .adminUsersActionRow {
-  justify-content: center;
-  gap: 0.5rem;
-  flex-wrap: nowrap;
+    justify-content: center;
+    gap: 0.5rem;
+    flex-wrap: nowrap;
 }
 
 .adminUsersActionRow .adminIconActionButton {
-  width: 2.25rem;
-  min-width: 2.25rem;
-  height: 2.25rem;
-  padding: 0;
+    width: 2.25rem;
+    min-width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
 }
->>>>>>> main
+
+/* =========================================
+   Verification Report Styles
+========================================= */
+
+.adminInfoGridCompact {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.adminVerificationReportSnapshot,
+.adminVerificationReportStatusCell {
+    display: grid;
+    gap: 4px;
+}
+
+.adminVerificationReportSnapshot strong,
+.adminVerificationReportSnapshot span,
+.adminVerificationReportSnapshot small,
+.adminVerificationReportStatusCell small {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+}
+
+.adminVerificationReportStatusCell small,
+.adminVerificationReportSnapshot small {
+    color: #51657f;
+}
+
+.adminVerificationCandidatesTable th:nth-child(1),
+.adminVerificationCandidatesTable td:nth-child(1) {
+    width: 12%;
+}
+
+.adminVerificationCandidatesTable th:nth-child(2),
+.adminVerificationCandidatesTable td:nth-child(2) {
+    width: 12%;
+}
+
+.adminVerificationCandidatesTable th:nth-child(3),
+.adminVerificationCandidatesTable td:nth-child(3) {
+    width: 18%;
+}
+
+.adminVerificationCandidatesTable th:nth-child(4),
+.adminVerificationCandidatesTable td:nth-child(4) {
+    width: 22%;
+}
+
+.adminVerificationCandidatesTable th:nth-child(5),
+.adminVerificationCandidatesTable td:nth-child(5) {
+    width: 14%;
+}
+
+.adminVerificationCandidatesTable th:nth-child(6),
+.adminVerificationCandidatesTable td:nth-child(6) {
+    width: 22%;
+}
+
+.adminVerificationReportsTable th:nth-child(1),
+.adminVerificationReportsTable td:nth-child(1) {
+    width: 10%;
+}
+
+.adminVerificationReportsTable th:nth-child(2),
+.adminVerificationReportsTable td:nth-child(2) {
+    width: 10%;
+}
+
+.adminVerificationReportsTable th:nth-child(3),
+.adminVerificationReportsTable td:nth-child(3) {
+    width: 18%;
+}
+
+.adminVerificationReportsTable th:nth-child(4),
+.adminVerificationReportsTable td:nth-child(4) {
+    width: 18%;
+}
+
+.adminVerificationReportsTable th:nth-child(5),
+.adminVerificationReportsTable td:nth-child(5) {
+    width: 12%;
+}
+
+.adminVerificationReportsTable th:nth-child(6),
+.adminVerificationReportsTable td:nth-child(6) {
+    width: 16%;
+}
+
+.adminVerificationReportsTable th:nth-child(7),
+.adminVerificationReportsTable td:nth-child(7) {
+    width: 16%;
+}
+
+.adminVerificationReportDetailCard {
+    width: min(1120px, calc(100vw - 32px));
+}
+
+.adminReportDetailGrid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.adminReportDetailTableCard .adminTable th,
+.adminReportDetailTableCard .adminTable td,
+.adminVerificationReportDetailCard .adminTable th,
+.adminVerificationReportDetailCard .adminTable td {
+    white-space: normal;
+}
+
+@media (max-width: 1200px) {
+    .adminInfoGridCompact,
+    .adminReportDetailGrid {
+        grid-template-columns: 1fr;
+    }
+}

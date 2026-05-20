@@ -10,6 +10,9 @@ import RegisterModal from '../../components/registerModal';
 import RfidProgramFormModal from '../../components/rfidProgramFormModal';
 import ServiceOrderChangeRequestResolveModal from '../../components/serviceOrderChangeRequestResolveModal';
 import ServiceOrderFormModal from '../../components/serviceOrderFormModal';
+import VerificationReportCreateModal from '../../components/verificationReportCreateModal';
+import VerificationReportDetailModal from '../../components/verificationReportDetailModal';
+import VerificationReportStatusModal from '../../components/verificationReportStatusModal';
 import '../../css/administratorDashboard.css';
 import { useAuth } from '../../context/useAuth';
 import {
@@ -41,6 +44,13 @@ import {
   resolveServiceOrderChangeRequest,
   updateServiceOrder,
 } from '../../services/serviceOrderService';
+import {
+  createVerificationReport,
+  listVerificationReports,
+  markVerificationReportAsPrinted,
+  markVerificationReportPrintInterrupted,
+  reprintVerificationReport,
+} from '../../services/verificationReportService';
 import { listProgrammingRecords as listProgrammingRecordsService } from '../../services/programmingRecordService';
 import type { Gtin, GtinMutationPayload } from '../../types/Gtin';
 import type { PartConfig, PartConfigMutationPayload } from '../../types/PartConfig';
@@ -52,6 +62,13 @@ import type {
   ServiceOrderChangeRequest,
   ServiceOrderMutationPayload,
 } from '../../types/ServiceOrder';
+import type {
+  CreateVerificationReportPayload,
+  UpdateVerificationReportStatusPayload,
+  VerificationReport,
+  VerificationReportHistoryEvent,
+  VerificationReportStatus,
+} from '../../types/VerificationReport';
 import {
   deleteUser,
   getUsers,
@@ -84,12 +101,18 @@ type PendingUserAction =
   | { type: 'deactivate'; user: User }
   | { type: 'delete'; user: User };
 
+type PendingVerificationReportAction = {
+  type: 'print_interrupted' | 'printed' | 'reprinted';
+  report: VerificationReport;
+};
+
 type AdminSectionId =
   | 'dashboard'
   | 'partNumbers'
   | 'gtin'
   | 'rfidProgram'
   | 'serviceOrder'
+  | 'verificationReports'
   | 'users';
 
 type AdminSectionDefinition = {
@@ -120,6 +143,11 @@ const ADMIN_SECTIONS: AdminSectionDefinition[] = [
     description: 'Espacio reservado para futuras herramientas de programas RFID.',
   },
   {
+    id: 'verificationReports',
+    label: 'Reportes',
+    description: 'Consulta, genera y da seguimiento al ciclo de impresion de reportes.',
+  },
+  {
     id: 'users',
     label: 'Usuarios',
     description: 'Registro y administracion basica de usuarios.',
@@ -131,6 +159,11 @@ const SUPERVISOR_SECTIONS: AdminSectionDefinition[] = [
     id: 'serviceOrder',
     label: 'Orden de servicio',
     description: 'Crea, edita y resuelve incidencias de ordenes de servicio.',
+  },
+  {
+    id: 'verificationReports',
+    label: 'Reportes',
+    description: 'Genera reportes cerrados y controla los estados de impresion.',
   },
 ];
 
@@ -216,6 +249,31 @@ const getServiceOrderRemainingToVerify = (serviceOrder: ServiceOrder) =>
     0,
   );
 
+const formatVerificationReportStatus = (status: VerificationReportStatus) => {
+  switch (status) {
+    case 'generated':
+      return 'Generated';
+    case 'print_interrupted':
+      return 'Print Interrupted';
+    case 'printed':
+      return 'Printed';
+    case 'reprinted':
+      return 'Reprinted';
+    default:
+      return status;
+  }
+};
+
+const getLatestVerificationReportEvent = (
+  report: VerificationReport,
+): VerificationReportHistoryEvent | null => {
+  if (report.history.length === 0) {
+    return null;
+  }
+
+  return report.history[report.history.length - 1] ?? null;
+};
+
 const formatChangeRequestType = (requestType: ServiceOrderChangeRequest['requestType']) => {
   switch (requestType) {
     case 'missing_product':
@@ -255,13 +313,21 @@ function AdministrationDashboardPage() {
   const [changeRequests, setChangeRequests] = useState<ServiceOrderChangeRequest[]>([]);
   const [programmedRecords, setProgrammedRecords] = useState<ProgrammingRecord[]>([]);
   const [verifiedRecords, setVerifiedRecords] = useState<ProgrammingRecord[]>([]);
+  const [verificationReports, setVerificationReports] = useState<VerificationReport[]>([]);
   const [isLoadingServiceOrders, setIsLoadingServiceOrders] = useState(false);
   const [isLoadingChangeRequests, setIsLoadingChangeRequests] = useState(false);
   const [isLoadingProgrammingRecords, setIsLoadingProgrammingRecords] = useState(false);
+  const [isLoadingVerificationReports, setIsLoadingVerificationReports] = useState(false);
   const [isCreateServiceOrderModalOpen, setIsCreateServiceOrderModalOpen] = useState(false);
   const [editingServiceOrder, setEditingServiceOrder] = useState<ServiceOrder | null>(null);
   const [resolvingChangeRequest, setResolvingChangeRequest] =
     useState<ServiceOrderChangeRequest | null>(null);
+  const [creatingVerificationReportFor, setCreatingVerificationReportFor] =
+    useState<ServiceOrder | null>(null);
+  const [selectedVerificationReport, setSelectedVerificationReport] =
+    useState<VerificationReport | null>(null);
+  const [pendingVerificationReportAction, setPendingVerificationReportAction] =
+    useState<PendingVerificationReportAction | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAdminAction | null>(null);
   const [pendingGtinAction, setPendingGtinAction] = useState<PendingGtinAction | null>(null);
   const [pendingRfidProgramAction, setPendingRfidProgramAction] =
@@ -299,6 +365,22 @@ function AdministrationDashboardPage() {
     (total, serviceOrder) => total + getServiceOrderRemainingToVerify(serviceOrder),
     0,
   );
+  const verificationReportsPendingPrintCount = verificationReports.filter(
+    (report) => report.status === 'generated' || report.status === 'print_interrupted',
+  ).length;
+  const verificationReportsCompletedCount = verificationReports.filter(
+    (report) => report.status === 'printed' || report.status === 'reprinted',
+  ).length;
+  const reportEligibleServiceOrders = serviceOrders.filter(
+    (serviceOrder) =>
+      serviceOrder.status === 'closed' &&
+      getServiceOrderVerifiedCount(serviceOrder) >= serviceOrder.quantity,
+  );
+  const reportEligibleOrdersWithoutReport = reportEligibleServiceOrders.filter(
+    (serviceOrder) =>
+      !verificationReports.some((report) => report.serviceOrderId === serviceOrder._id),
+  );
+
   const loadPartConfigs = async (options?: { clearMessage?: boolean; suppressErrorMessage?: boolean }) => {
     setIsLoading(true);
 
@@ -500,6 +582,32 @@ function AdministrationDashboardPage() {
     }
   };
 
+  const loadVerificationReports = async (options?: { clearMessage?: boolean }) => {
+    setIsLoadingVerificationReports(true);
+
+    if (options?.clearMessage ?? true) {
+      setMessage(null);
+    }
+
+    try {
+      const nextVerificationReports = await listVerificationReports();
+      setVerificationReports(nextVerificationReports);
+      return true;
+    } catch (error) {
+      setVerificationReports([]);
+      setMessage({
+        type: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'No se pudieron cargar los reportes de verificacion.',
+      });
+      return false;
+    } finally {
+      setIsLoadingVerificationReports(false);
+    }
+  };
+
   useEffect(() => {
     if (isSupervisor) {
       void loadPartConfigs({ clearMessage: false, suppressErrorMessage: true });
@@ -507,6 +615,7 @@ function AdministrationDashboardPage() {
       void loadChangeRequests({ clearMessage: false });
       void loadGtins({ clearMessage: false, suppressErrorMessage: true });
       void loadRfidPrograms({ clearMessage: false, suppressErrorMessage: true });
+      void loadVerificationReports({ clearMessage: false });
       return;
     }
 
@@ -515,6 +624,7 @@ function AdministrationDashboardPage() {
       void loadGtins({ clearMessage: false });
       void loadRfidPrograms({ clearMessage: false });
       void loadProgrammingRecords({ clearMessage: false });
+      void loadVerificationReports({ clearMessage: false });
       void loadUsers({ clearMessage: false });
     }
   }, [isAdmin, isSupervisor]);
@@ -673,6 +783,65 @@ function AdministrationDashboardPage() {
     ]);
 
     if (didRefreshOrders && didRefreshRequests) {
+      setMessage({
+        type: 'success',
+        text: result.message,
+      });
+    }
+  };
+
+  const handleCreateVerificationReport = async (payload: CreateVerificationReportPayload) => {
+    const result = await createVerificationReport(payload);
+    setCreatingVerificationReportFor(null);
+    const didRefreshReports = await loadVerificationReports({ clearMessage: false });
+
+    if (didRefreshReports) {
+      setMessage({
+        type: 'success',
+        text: result.message,
+      });
+    }
+  };
+
+  const handleSubmitVerificationReportAction = async (
+    payload: UpdateVerificationReportStatusPayload,
+  ) => {
+    if (!pendingVerificationReportAction) {
+      throw new Error('No se encontro la accion de reporte que se quiere ejecutar.');
+    }
+
+    let result;
+
+    switch (pendingVerificationReportAction.type) {
+      case 'print_interrupted':
+        result = await markVerificationReportPrintInterrupted(
+          pendingVerificationReportAction.report._id,
+          payload,
+        );
+        break;
+      case 'printed':
+        result = await markVerificationReportAsPrinted(
+          pendingVerificationReportAction.report._id,
+          payload,
+        );
+        break;
+      case 'reprinted':
+        result = await reprintVerificationReport(
+          pendingVerificationReportAction.report._id,
+          payload,
+        );
+        break;
+      default:
+        throw new Error('La accion de reporte seleccionada no es valida.');
+    }
+
+    setPendingVerificationReportAction(null);
+    setSelectedVerificationReport((currentReport) =>
+      currentReport?._id === result.data._id ? result.data : currentReport,
+    );
+    const didRefreshReports = await loadVerificationReports({ clearMessage: false });
+
+    if (didRefreshReports) {
       setMessage({
         type: 'success',
         text: result.message,
@@ -1563,6 +1732,331 @@ function AdministrationDashboardPage() {
     </section>
   );
 
+  const renderVerificationReportsSection = () => (
+    <section className='adminSectionStack'>
+      <div className='adminMetricsGrid'>
+        <article className='adminMetricCard adminMetricCardPrimary'>
+          <span className='adminMetricLabel'>Reportes totales</span>
+          <strong className='adminMetricValue'>
+            {isLoadingVerificationReports ? '...' : String(verificationReports.length)}
+          </strong>
+          <p>Un solo reporte por orden de servicio cerrada y completamente verificada.</p>
+        </article>
+
+        <article className='adminMetricCard'>
+          <span className='adminMetricLabel'>Pendientes de impresion</span>
+          <strong className='adminMetricValue'>
+            {isLoadingVerificationReports ? '...' : String(verificationReportsPendingPrintCount)}
+          </strong>
+          <p>Incluye estados generated y print_interrupted.</p>
+        </article>
+
+        <article className='adminMetricCard'>
+          <span className='adminMetricLabel'>
+            {isSupervisor ? 'Ordenes listas sin reporte' : 'Reportes cerrados'}
+          </span>
+          <strong className='adminMetricValue'>
+            {isSupervisor
+              ? isLoadingServiceOrders || isLoadingVerificationReports
+                ? '...'
+                : String(reportEligibleOrdersWithoutReport.length)
+              : isLoadingVerificationReports
+                ? '...'
+                : String(verificationReportsCompletedCount)}
+          </strong>
+          <p>
+            {isSupervisor
+              ? 'Ordenes cerradas con verificacion completa y aun sin generar.'
+              : 'Suma de reportes en estado printed o reprinted.'}
+          </p>
+        </article>
+      </div>
+
+      <div className='adminToolbar'>
+        <div>
+          <h2>Reportes de verificacion</h2>
+          <p>
+            {isSupervisor
+              ? 'Genera reportes una vez cerrada la orden y administra el avance de impresion.'
+              : 'Consulta reportes congelados y ejecuta reimpresiones autorizadas.'}
+          </p>
+        </div>
+
+        <div className='adminToolbarActions'>
+          <button
+            className='adminPrimaryButton'
+            type='button'
+            onClick={() => {
+              void loadVerificationReports();
+              if (isSupervisor) {
+                void loadServiceOrders({ clearMessage: false });
+              }
+            }}
+          >
+            Recargar
+          </button>
+        </div>
+      </div>
+
+      {isSupervisor && (
+        <div className='adminTableCard'>
+          <div className='adminTableHeader'>
+            <h3>Ordenes cerradas listas para reporte</h3>
+            <p className='adminTableMeta'>
+              {isLoadingServiceOrders || isLoadingVerificationReports
+                ? 'Cargando...'
+                : `${reportEligibleServiceOrders.length} ordenes elegibles`}
+            </p>
+          </div>
+
+          <div className='adminTableWrapper'>
+            <table className='adminTable adminVerificationCandidatesTable'>
+              <thead>
+                <tr>
+                  <th>Folio</th>
+                  <th>Tipo</th>
+                  <th>Referencia</th>
+                  <th>Avance</th>
+                  <th>Reporte</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isLoadingServiceOrders || isLoadingVerificationReports ? (
+                  <tr>
+                    <td colSpan={6} className='adminTableEmpty'>
+                      Cargando ordenes elegibles...
+                    </td>
+                  </tr>
+                ) : reportEligibleServiceOrders.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className='adminTableEmpty'>
+                      No hay ordenes cerradas con verificacion completa listas para reporte.
+                    </td>
+                  </tr>
+                ) : (
+                  reportEligibleServiceOrders.map((serviceOrder) => {
+                    const existingReport =
+                      verificationReports.find(
+                        (report) => report.serviceOrderId === serviceOrder._id,
+                      ) ?? null;
+
+                    return (
+                      <tr key={serviceOrder._id}>
+                        <td>{serviceOrder.folio}</td>
+                        <td>{formatServiceOrderReadingMode(serviceOrder.readingMode)}</td>
+                        <td>{formatServiceOrderPrimaryReference(serviceOrder)}</td>
+                        <td>
+                          <div className='adminOrderProgressCell'>
+                            <strong>{`Verificados: ${getServiceOrderVerifiedCount(serviceOrder)}/${serviceOrder.quantity}`}</strong>
+                            <small>{`Pendientes por verificar: ${getServiceOrderRemainingToVerify(serviceOrder)}.`}</small>
+                          </div>
+                        </td>
+                        <td>
+                          {existingReport ? (
+                            <span
+                              className={`adminBadge ${
+                                existingReport.status === 'printed' ||
+                                existingReport.status === 'reprinted'
+                                  ? 'active'
+                                  : 'inactive'
+                              }`}
+                            >
+                              {formatVerificationReportStatus(existingReport.status)}
+                            </span>
+                          ) : (
+                            <span className='adminBadge inactive'>Sin reporte</span>
+                          )}
+                        </td>
+                        <td>
+                          <div className='adminActionRow'>
+                            {existingReport ? (
+                              <button
+                                className='adminActionButton'
+                                type='button'
+                                onClick={() => {
+                                  setMessage(null);
+                                  setSelectedVerificationReport(existingReport);
+                                }}
+                              >
+                                Detalle
+                              </button>
+                            ) : (
+                              <button
+                                className='adminActionButton'
+                                type='button'
+                                onClick={() => {
+                                  setMessage(null);
+                                  setCreatingVerificationReportFor(serviceOrder);
+                                }}
+                              >
+                                Generar
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <div className='adminTableCard'>
+        <div className='adminTableHeader'>
+          <h3>Listado de reportes</h3>
+          <p className='adminTableMeta'>
+            {isLoadingVerificationReports
+              ? 'Cargando...'
+              : `${verificationReports.length} reportes encontrados`}
+          </p>
+        </div>
+
+        <div className='adminTableWrapper'>
+          <table className='adminTable adminVerificationReportsTable'>
+            <thead>
+              <tr>
+                <th>Folio</th>
+                <th>Tipo</th>
+                <th>Encabezado congelado</th>
+                <th>Representantes</th>
+                <th>Status</th>
+                <th>Ultimo evento</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoadingVerificationReports ? (
+                <tr>
+                  <td colSpan={7} className='adminTableEmpty'>
+                    Cargando reportes de verificacion...
+                  </td>
+                </tr>
+              ) : verificationReports.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className='adminTableEmpty'>
+                    No hay reportes generados por mostrar.
+                  </td>
+                </tr>
+              ) : (
+                verificationReports.map((report) => {
+                  const latestEvent = getLatestVerificationReportEvent(report);
+                  const isCompletedReport =
+                    report.status === 'printed' || report.status === 'reprinted';
+
+                  return (
+                    <tr key={report._id}>
+                      <td>{report.serviceOrderFolio}</td>
+                      <td>{formatServiceOrderReadingMode(report.serviceOrderReadingMode)}</td>
+                      <td>
+                        <div className='adminVerificationReportSnapshot'>
+                          <strong>{report.partNumber}</strong>
+                          <span>{`Lote: ${report.lot}`}</span>
+                          <small>{`Fecha de manufactura: ${report.manufactureDate}`}</small>
+                        </div>
+                      </td>
+                      <td>
+                        <div className='adminVerificationReportSnapshot'>
+                          <span>{`Manufactura: ${report.manufacturingRepresentativeName}`}</span>
+                          <span>{`Calidad: ${report.qualityRepresentativeName}`}</span>
+                          <small>{`Filas congeladas: ${report.rows.length}/${report.quantity}`}</small>
+                        </div>
+                      </td>
+                      <td>
+                        <div className='adminVerificationReportStatusCell'>
+                          <span className={`adminBadge ${isCompletedReport ? 'active' : 'inactive'}`}>
+                            {formatVerificationReportStatus(report.status)}
+                          </span>
+                          <small>{formatDate(report.updatedAt ?? report.createdAt)}</small>
+                        </div>
+                      </td>
+                      <td>
+                        <div className='adminVerificationReportSnapshot'>
+                          <strong>
+                            {latestEvent
+                              ? formatVerificationReportStatus(latestEvent.type)
+                              : 'Sin eventos'}
+                          </strong>
+                          <span>{formatDate(latestEvent?.occurredAt)}</span>
+                          <small>{latestEvent?.performedByUsername?.trim() || 'N/D'}</small>
+                        </div>
+                      </td>
+                      <td>
+                        <div className='adminActionRow'>
+                          <button
+                            className='adminActionButton'
+                            type='button'
+                            onClick={() => {
+                              setMessage(null);
+                              setSelectedVerificationReport(report);
+                            }}
+                          >
+                            Detalle
+                          </button>
+
+                          {isSupervisor && report.status !== 'print_interrupted' && (
+                            <button
+                              className='adminActionButton'
+                              type='button'
+                              onClick={() => {
+                                setMessage(null);
+                                setPendingVerificationReportAction({
+                                  type: 'print_interrupted',
+                                  report,
+                                });
+                              }}
+                            >
+                              Interr.
+                            </button>
+                          )}
+
+                          {isSupervisor && report.status !== 'printed' && (
+                            <button
+                              className='adminActionButton'
+                              type='button'
+                              onClick={() => {
+                                setMessage(null);
+                                setPendingVerificationReportAction({
+                                  type: 'printed',
+                                  report,
+                                });
+                              }}
+                            >
+                              Impreso
+                            </button>
+                          )}
+
+                          {isSupervisor && report.status !== 'generated' && (
+                            <button
+                              className='adminActionButton'
+                              type='button'
+                              onClick={() => {
+                                setMessage(null);
+                                setPendingVerificationReportAction({
+                                  type: 'reprinted',
+                                  report,
+                                });
+                              }}
+                            >
+                              Reimp.
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  );
+
   const renderUsersSection = () => (
     <section className='adminSectionStack'>
       <article className='adminInfoCard'>
@@ -1716,6 +2210,8 @@ function AdministrationDashboardPage() {
         return renderRfidProgramsSection();
       case 'serviceOrder':
         return renderServiceOrdersSection();
+      case 'verificationReports':
+        return renderVerificationReportsSection();
       case 'users':
         return renderUsersSection();
       default:
@@ -1912,6 +2408,21 @@ function AdministrationDashboardPage() {
         />
       )}
 
+      {creatingVerificationReportFor && (
+        <VerificationReportCreateModal
+          serviceOrder={creatingVerificationReportFor}
+          onClose={() => setCreatingVerificationReportFor(null)}
+          onSubmit={handleCreateVerificationReport}
+        />
+      )}
+
+      {selectedVerificationReport && (
+        <VerificationReportDetailModal
+          report={selectedVerificationReport}
+          onClose={() => setSelectedVerificationReport(null)}
+        />
+      )}
+
       {copyingPartConfig && (
         <PartConfigFormModal
           title={`Copiar ${copyingPartConfig.partNumber}`}
@@ -1946,6 +2457,15 @@ function AdministrationDashboardPage() {
           changeRequest={resolvingChangeRequest}
           onClose={() => setResolvingChangeRequest(null)}
           onSubmit={handleResolveChangeRequest}
+        />
+      )}
+
+      {pendingVerificationReportAction && (
+        <VerificationReportStatusModal
+          report={pendingVerificationReportAction.report}
+          action={pendingVerificationReportAction.type}
+          onClose={() => setPendingVerificationReportAction(null)}
+          onSubmit={handleSubmitVerificationReportAction}
         />
       )}
 

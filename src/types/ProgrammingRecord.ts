@@ -1,3 +1,5 @@
+import type { ServiceOrder } from './ServiceOrder';
+
 export type ProgrammingRecordMode = 'manual' | 'single_scan' | 'double_scan';
 
 export type ProgrammingRecordSourceType =
@@ -99,7 +101,14 @@ export interface ResolveProgrammingRecordResponse {
 
 export interface VerifyProgrammingRecordResponse {
   message: string;
-  data: ProgrammingRecord;
+  data: {
+    programmingRecord: ProgrammingRecord;
+    serviceOrder?: ServiceOrder;
+    verificationReport?: {
+      exists: boolean;
+      canGenerate: boolean;
+    };
+  };
 }
 
 export interface ProgrammingRecordListFilters {

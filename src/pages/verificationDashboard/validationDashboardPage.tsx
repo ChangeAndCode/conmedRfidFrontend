@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppSceneLayout from '../../components/appSceneLayout';
+import VerificationReportCreateModal from '../../components/verificationReportCreateModal';
 import { useAuth } from '../../context/useAuth';
 import '../../css/verificationDashboard.css';
 import { getServiceOrderById } from '../../services/serviceOrderService';
@@ -8,6 +9,9 @@ import {
   resolveProgrammingRecord,
   verifyProgrammingRecord,
 } from '../../services/programmingRecordService';
+import {
+  createVerificationReport,
+} from '../../services/verificationReportService';
 import type {
   ProgrammingRecord,
   ProgrammingRecordMatchStrategy,
@@ -15,8 +19,10 @@ import type {
   ResolveProgrammingRecordPayload,
   ResolveProgrammingRecordResult,
   VerifyProgrammingRecordPayload,
+  VerifyProgrammingRecordResponse,
 } from '../../types/ProgrammingRecord';
 import type { ServiceOrder } from '../../types/ServiceOrder';
+import type { CreateVerificationReportPayload } from '../../types/VerificationReport';
 
 type FeedbackMessage = {
   type: 'success' | 'error' | 'info';
@@ -89,7 +95,7 @@ const formatStatusLabel = (status: ProgrammingRecord['status']) => {
 const formatMatchStrategy = (strategy?: ProgrammingRecordMatchStrategy) => {
   switch (strategy) {
     case 'manual_raw_reference':
-      return 'Referencia manual exacta';
+      return 'Folio / parte / referencia manual';
     case 'single_scan_raw':
       return 'Single scan exacto';
     case 'double_scan_raw':
@@ -155,9 +161,27 @@ const getServiceOrderRemainingToVerify = (serviceOrder?: ServiceOrder | null) =>
     0,
   );
 
+const isServiceOrderReadyForVerificationReport = (serviceOrder?: ServiceOrder | null) =>
+  serviceOrder?.status === 'closed' && getServiceOrderRemainingToVerify(serviceOrder) === 0;
+
+const isAuthorizationError = (error: unknown) =>
+  error instanceof Error &&
+  error.message.toLowerCase().includes('bearer');
+
+const shouldOpenVerificationReportModal = (
+  serviceOrder?: ServiceOrder | null,
+  verificationReport?: VerifyProgrammingRecordResponse['data']['verificationReport'],
+) =>
+  Boolean(
+    serviceOrder &&
+      isServiceOrderReadyForVerificationReport(serviceOrder) &&
+      verificationReport?.canGenerate &&
+      !verificationReport.exists,
+  );
+
 function ValidationDashboardPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [mode, setMode] = useState<ProgrammingRecordMode>('manual');
   const [formValues, setFormValues] = useState<VerificationFormState>(() =>
     INITIAL_FORM_VALUES(user?.username),
@@ -170,27 +194,55 @@ function ValidationDashboardPage() {
   const [relatedServiceOrder, setRelatedServiceOrder] = useState<ServiceOrder | null>(null);
   const [isLoadingRelatedServiceOrder, setIsLoadingRelatedServiceOrder] = useState(false);
   const [relatedServiceOrderError, setRelatedServiceOrderError] = useState<string | null>(null);
+  const [creatingVerificationReportFor, setCreatingVerificationReportFor] =
+    useState<ServiceOrder | null>(null);
 
   const selectedProgrammingRecord =
     resolution?.candidates.find((candidate) => candidate._id === selectedProgrammingRecordId) ?? null;
 
-  const loadRelatedServiceOrder = async (serviceOrderId: string) => {
+  const loadRelatedServiceOrder = async (serviceOrderId: string): Promise<ServiceOrder | null> => {
+    if (!token) {
+      setRelatedServiceOrder(null);
+      setRelatedServiceOrderError(null);
+      setIsLoadingRelatedServiceOrder(false);
+      return null;
+    }
+
     setIsLoadingRelatedServiceOrder(true);
     setRelatedServiceOrderError(null);
 
     try {
       const nextServiceOrder = await getServiceOrderById(serviceOrderId);
       setRelatedServiceOrder(nextServiceOrder);
+      return nextServiceOrder;
     } catch (error) {
       setRelatedServiceOrder(null);
       setRelatedServiceOrderError(
-        error instanceof Error
-          ? error.message
-          : 'No se pudo consultar el estado de la orden de servicio.',
+        isAuthorizationError(error)
+          ? null
+          : error instanceof Error
+            ? error.message
+            : 'No se pudo consultar el estado de la orden de servicio.',
       );
+      return null;
     } finally {
       setIsLoadingRelatedServiceOrder(false);
     }
+  };
+
+  const maybeOpenVerificationReportModal = (
+    serviceOrder?: ServiceOrder | null,
+    verificationReport?: VerifyProgrammingRecordResponse['data']['verificationReport'],
+  ) => {
+    if (
+      !serviceOrder ||
+      creatingVerificationReportFor?._id === serviceOrder._id ||
+      !shouldOpenVerificationReportModal(serviceOrder, verificationReport)
+    ) {
+      return;
+    }
+
+    setCreatingVerificationReportFor(serviceOrder);
   };
 
   const resetResolutionState = () => {
@@ -241,7 +293,7 @@ function ValidationDashboardPage() {
     }
 
     void loadRelatedServiceOrder(serviceOrderId);
-  }, [selectedProgrammingRecord?.serviceOrderId]);
+  }, [selectedProgrammingRecord?.serviceOrderId, token]);
 
   const buildResolvePayload = (): ResolveProgrammingRecordPayload => {
     if (mode === 'manual') {
@@ -294,7 +346,7 @@ function ValidationDashboardPage() {
 
   const validateCurrentEvidence = () => {
     if (mode === 'manual' && !formValues.rawReference.trim()) {
-      return 'Captura la referencia manual para resolver la programacion.';
+      return 'Captura el folio de la orden, el numero de parte o la referencia manual guardada.';
     }
 
     if (mode === 'single_scan' && !formValues.rawScan.trim()) {
@@ -374,8 +426,8 @@ function ValidationDashboardPage() {
 
     if (selectedProgrammingRecord.status === 'verified') {
       setMessage({
-        type: 'info',
-        text: 'El programming record seleccionado ya esta verificado.',
+        type: 'success',
+        text: 'El codigo escaneado ya fue verificado.',
       });
       return;
     }
@@ -388,6 +440,8 @@ function ValidationDashboardPage() {
         selectedProgrammingRecord._id,
         buildVerifyPayload(),
       );
+      const verifiedProgrammingRecord = result.data.programmingRecord;
+      const refreshedServiceOrder = result.data.serviceOrder ?? null;
 
       setResolution((currentResolution) => {
         if (!currentResolution) {
@@ -397,21 +451,29 @@ function ValidationDashboardPage() {
         return {
           ...currentResolution,
           candidates: currentResolution.candidates.map((candidate) =>
-            candidate._id === result.data._id ? result.data : candidate,
+            candidate._id === verifiedProgrammingRecord._id ? verifiedProgrammingRecord : candidate,
           ),
         };
       });
 
-      setSelectedProgrammingRecordId(result.data._id);
+      setSelectedProgrammingRecordId(verifiedProgrammingRecord._id);
 
-      if (result.data.serviceOrderId) {
-        await loadRelatedServiceOrder(result.data.serviceOrderId);
+      if (refreshedServiceOrder) {
+        setRelatedServiceOrder(refreshedServiceOrder);
+        setRelatedServiceOrderError(null);
+      } else if (verifiedProgrammingRecord.serviceOrderId) {
+        await loadRelatedServiceOrder(verifiedProgrammingRecord.serviceOrderId);
       }
 
       setMessage({
         type: 'success',
         text: result.message,
       });
+
+      maybeOpenVerificationReportModal(
+        refreshedServiceOrder,
+        result.data.verificationReport,
+      );
     } catch (error) {
       setMessage({
         type: 'error',
@@ -429,6 +491,15 @@ function ValidationDashboardPage() {
       ...INITIAL_FORM_VALUES(user?.username),
       verifiedBy: currentValues.verifiedBy.trim() || buildDefaultVerifier(user?.username),
     }));
+  };
+
+  const handleCreateVerificationReport = async (payload: CreateVerificationReportPayload) => {
+    const result = await createVerificationReport(payload);
+    setCreatingVerificationReportFor(null);
+    setMessage({
+      type: 'success',
+      text: result.message,
+    });
   };
 
   return (
@@ -463,7 +534,7 @@ function ValidationDashboardPage() {
               <div className='verificationPanelHeader'>
                 <div>
                   <h2>Evidencia</h2>
-                  <p>Elige el modo y captura exactamente la misma evidencia usada en programacion.</p>
+                  <p>Elige el modo y captura la evidencia con la que el backend puede resolver el programming record.</p>
                 </div>
               </div>
 
@@ -482,21 +553,29 @@ function ValidationDashboardPage() {
 
               <div className='verificationFormGrid'>
                 {mode === 'manual' && (
-                  <label className='verificationField verificationFieldFull'>
-                    <span>Raw reference</span>
-                    <input
-                      type='text'
-                      value={formValues.rawReference}
-                      onChange={(event) =>
-                        setFormValues((currentValues) => ({
-                          ...currentValues,
-                          rawReference: event.target.value,
-                        }))
-                      }
-                      placeholder='500322 A'
-                      disabled={isResolving || isVerifying}
-                    />
-                  </label>
+                  <>
+                    <label className='verificationField verificationFieldFull'>
+                      <span>Referencia manual / folio</span>
+                      <input
+                        type='text'
+                        value={formValues.rawReference}
+                        onChange={(event) =>
+                          setFormValues((currentValues) => ({
+                            ...currentValues,
+                            rawReference: event.target.value,
+                          }))
+                        }
+                        placeholder='ML20260519140228 o A2A00231'
+                        disabled={isResolving || isVerifying}
+                      />
+                    </label>
+
+                    <div className='verificationHint verificationFieldFull'>
+                      Usa el folio de la orden manual, el numero de parte o la referencia guardada
+                      al programar. Para lecturas manuales nuevas, la referencia por defecto ya es
+                      el folio de la orden.
+                    </div>
+                  </>
                 )}
 
                 {mode === 'single_scan' && (
@@ -662,7 +741,7 @@ function ValidationDashboardPage() {
                       </div>
                       {resolution.normalizedInput.rawReference && (
                         <div className='verificationKeyValueFull'>
-                          <span>Raw reference</span>
+                          <span>Referencia manual</span>
                           <strong>{resolution.normalizedInput.rawReference}</strong>
                         </div>
                       )}
@@ -844,7 +923,7 @@ function ValidationDashboardPage() {
                     </div>
                   </div>
 
-                  {(selectedProgrammingRecord.serviceOrderId || relatedServiceOrderError) && (
+                  {selectedProgrammingRecord.serviceOrderId && (
                     <div className='verificationSelectedRecordCard'>
                       <div className='verificationSelectedRecordHeader'>
                         <div>
@@ -891,11 +970,11 @@ function ValidationDashboardPage() {
                             <strong>{formatDateTime(relatedServiceOrder.updatedAt)}</strong>
                           </div>
                         </div>
-                      ) : (
+                      ) : relatedServiceOrderError ? (
                         <p className='verificationHint'>
                           {relatedServiceOrderError ?? 'No se pudo consultar la orden de servicio.'}
                         </p>
-                      )}
+                      ) : null}
                     </div>
                   )}
 
@@ -915,8 +994,8 @@ function ValidationDashboardPage() {
                   </div>
 
                   {selectedProgrammingRecord.status === 'verified' && (
-                    <p className='verificationHint'>
-                      Este programming record ya fue verificado. Si la evidencia no coincide, el backend respondera `409`.
+                    <p className='verificationMessage success'>
+                      El codigo escaneado ya fue verificado.
                     </p>
                   )}
                 </div>
@@ -925,6 +1004,14 @@ function ValidationDashboardPage() {
           </div>
         </div>
       </section>
+
+      {creatingVerificationReportFor && (
+        <VerificationReportCreateModal
+          serviceOrder={creatingVerificationReportFor}
+          onClose={() => setCreatingVerificationReportFor(null)}
+          onSubmit={handleCreateVerificationReport}
+        />
+      )}
     </AppSceneLayout>
   );
 }
