@@ -221,9 +221,9 @@ export async function createServiceOrderChangeRequest(
 ): Promise<{ message: string; data: ServiceOrderChangeRequest }> {
   const response = await fetch(`${API_URL}/api/service-orders/${serviceOrderId}/change-requests`, {
     method: 'POST',
-    headers: {
+    headers: buildAuthHeaders({
       'Content-Type': 'application/json',
-    },
+    }),
     body: JSON.stringify(payload),
   });
 
