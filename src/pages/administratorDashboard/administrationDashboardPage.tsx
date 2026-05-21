@@ -37,6 +37,7 @@ import {
 } from '../../services/rfidProgramService';
 import {
   createServiceOrder,
+  createServiceOrderChangeRequest,
   listServiceOrderChangeRequests,
   listServiceOrders,
   resolveServiceOrderChangeRequest,
@@ -685,31 +686,31 @@ function AdministrationDashboardPage() {
     }
   };
 
-  const handleCreateLocalChangeRequest = () => {
+  const handleCreateChangeRequest = async () => {
     if (!reportingServiceOrder) {
       return;
     }
 
-    const now = new Date().toISOString();
-    const nextChangeRequest = {
-      _id: `local-${reportingServiceOrder._id}-${Date.now()}`,
-      serviceOrderId: reportingServiceOrder._id,
-      serviceOrderFolio: reportingServiceOrder.folio,
+    const result = await createServiceOrderChangeRequest(reportingServiceOrder._id, {
       requestType: reportRequestType,
-      status: 'pending',
-      createdAt: now,
-      updatedAt: now,
-      resolutionNotes: reportNotes.trim(),
-    } as ServiceOrderChangeRequest;
+      reason: reportNotes.trim(),
+    });
 
-    setChangeRequests((currentRequests) => [nextChangeRequest, ...currentRequests]);
     setReportingServiceOrder(null);
     setReportRequestType('missing_product');
     setReportNotes('');
-    setMessage({
-      type: 'success',
-      text: `Solicitud creada para la orden ${reportingServiceOrder.folio}.`,
-    });
+
+    const [didRefreshOrders, didRefreshRequests] = await Promise.all([
+      loadServiceOrders({ clearMessage: false }),
+      loadChangeRequests({ clearMessage: false }),
+    ]);
+
+    if (didRefreshOrders && didRefreshRequests) {
+      setMessage({
+        type: 'success',
+        text: result.message,
+      });
+    }
   };
 
   const handleMarkServiceOrderAsResolved = (serviceOrder: ServiceOrder) => {
@@ -2004,7 +2005,7 @@ function AdministrationDashboardPage() {
             setReportRequestType('missing_product');
             setReportNotes('');
           }}
-          onSubmit={handleCreateLocalChangeRequest}
+          onSubmit={handleCreateChangeRequest}
         />
       )}
 

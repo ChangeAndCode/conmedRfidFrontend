@@ -59,6 +59,7 @@ export interface ServiceOrderChangeRequest {
 
 export interface CreateServiceOrderChangeRequestPayload {
   requestType: ServiceOrderChangeRequestType;
+  reason?: string;
 }
 
 export interface ResolveServiceOrderChangeRequestPayload {
