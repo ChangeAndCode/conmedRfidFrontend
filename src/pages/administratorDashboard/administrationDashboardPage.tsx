@@ -802,6 +802,13 @@ function AdministrationDashboardPage() {
     const didRefreshReports = await loadVerificationReports({ clearMessage: false });
 
     if (didRefreshReports) {
+      setMessage({
+        type: 'success',
+        text: result.message,
+      });
+    }
+  };
+
   const handleCreateChangeRequest = async () => {
     if (!reportingServiceOrder) {
       return;
@@ -873,6 +880,8 @@ function AdministrationDashboardPage() {
         text: result.message,
       });
     }
+  };
+
   const handleMarkServiceOrderAsResolved = (serviceOrder: ServiceOrder) => {
     const now = new Date().toISOString();
 
