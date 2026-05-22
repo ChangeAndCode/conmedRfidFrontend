@@ -19,6 +19,7 @@ export interface ServiceOrder {
   remainingToVerify?: number;
   status: ServiceOrderStatus;
   notes?: string;
+  allowedValidationCodes?: string[];
   createdByUserId?: string;
   createdByUsername?: string;
   updatedByUserId?: string;
@@ -36,6 +37,7 @@ export interface ServiceOrderMutationPayload {
   quantity: number;
   status?: ServiceOrderStatus;
   notes?: string;
+  allowedValidationCodes?: string[];
 }
 
 export interface ServiceOrderMutationResponse {

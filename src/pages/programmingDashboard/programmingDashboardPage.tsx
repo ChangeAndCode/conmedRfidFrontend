@@ -1077,17 +1077,17 @@ function ProgrammingDashboardPage() {
               </select>
             </div>
             <div className='buttonBox'>
-              <button className='buttonSelector' onClick={openManualModal} disabled={!port}>
+              <button className='adminPrimaryButton' onClick={openManualModal} disabled={!port}>
                 Ingreso Manual
               </button>
-              <button className='buttonSelector' onClick={openSingleScanModal} disabled={!port}>
+              <button className='adminPrimaryButton' onClick={openSingleScanModal} disabled={!port}>
                 Escaner Codigo
               </button>
-              <button className='buttonSelector' onClick={openDoubleScanModal} disabled={!port}>
+              <button className='adminPrimaryButton' onClick={openDoubleScanModal} disabled={!port}>
                 Doble Codigo
               </button>
             </div>
-            <button className='buttonSelector' type='button' onClick={() => navigate('/', { replace: true })}>
+            <button className='adminPrimaryButton adminSecondaryButton' type='button' onClick={() => navigate('/', { replace: true })}>
               Volver
             </button>
           </div>
@@ -1099,8 +1099,8 @@ function ProgrammingDashboardPage() {
           <div className='square generalBlock modalSquare'>
             <div className='modalHeader'>
               <h2>Ingreso Manual</h2>
-              <button className='buttonSelector' onClick={closeManualModal} disabled={isSubmittingManual}>
-                Cerrar
+              <button className='modalCloseButton' onClick={closeManualModal} disabled={isSubmittingManual}>
+                X
               </button>
             </div>
 
@@ -1215,7 +1215,7 @@ function ProgrammingDashboardPage() {
               {manualMessage && <p className={`manualMessage ${manualMessage.type}`}>{manualMessage.text}</p>}
 
               <button
-                className='buttonSelector modalSubmitButton'
+                className='adminPrimaryButton modalSubmitButton'
                 type='submit'
                 disabled={
                   isSubmittingManual ||
@@ -1272,7 +1272,7 @@ function ProgrammingDashboardPage() {
 
               <div className='modalActionRow'>
                 <button
-                  className='buttonSelector'
+                  className='adminPrimaryButton'
                   type='button'
                   onClick={() => void handleResolveFirstBarcode()}
                   disabled={
@@ -1437,7 +1437,7 @@ function ProgrammingDashboardPage() {
 
               <div className='modalActionRow'>
                 <button
-                  className='buttonSelector'
+                  className='adminPrimaryButton adminSecondaryButton'
                   type='button'
                   onClick={resetDoubleScanFlow}
                   disabled={isResolvingOrSubmitting}
@@ -1445,7 +1445,7 @@ function ProgrammingDashboardPage() {
                   Limpiar
                 </button>
                 <button
-                  className='buttonSelector modalSubmitButton'
+                  className='adminPrimaryButton modalSubmitButton'
                   type='submit'
                   disabled={
                     isResolvingOrSubmitting ||
@@ -1470,7 +1470,7 @@ function ProgrammingDashboardPage() {
             <div className='modalHeader'>
               <h2>Ingreso Single Scan</h2>
               <button
-                className='buttonSelector'
+                className='modalCloseButton'
                 onClick={closeSingleScanModal}
                 disabled={
                   isSubmittingSingleScan ||
@@ -1478,7 +1478,7 @@ function ProgrammingDashboardPage() {
                   isLoadingSingleScanPartOptions
                 }
               >
-                Cerrar
+                X
               </button>
             </div>
 
@@ -1508,7 +1508,7 @@ function ProgrammingDashboardPage() {
 
               <div className='modalActionRow'>
                 <button
-                  className='buttonSelector'
+                  className='adminPrimaryButton'
                   type='button'
                   onClick={() => void resolveSingleScanRaw()}
                   disabled={
@@ -1684,7 +1684,7 @@ function ProgrammingDashboardPage() {
 
               <div className='modalActionRow'>
                 <button
-                  className='buttonSelector'
+                  className='adminPrimaryButton adminSecondaryButton'
                   type='button'
                   onClick={() => {
                     clearSingleScanResetTimeout();
@@ -1699,7 +1699,7 @@ function ProgrammingDashboardPage() {
                   Limpiar
                 </button>
                 <button
-                  className='buttonSelector modalSubmitButton'
+                  className='adminPrimaryButton modalSubmitButton'
                   type='submit'
                   disabled={
                     isSubmittingSingleScan ||

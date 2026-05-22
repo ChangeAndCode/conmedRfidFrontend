@@ -254,13 +254,13 @@ const getServiceOrderRemainingToVerify = (serviceOrder: ServiceOrder) =>
 const formatVerificationReportStatus = (status: VerificationReportStatus) => {
   switch (status) {
     case 'generated':
-      return 'Generated';
+      return 'Pendiente de impresión';
     case 'print_interrupted':
-      return 'Print Interrupted';
+      return 'Impresión interrumpida';
     case 'printed':
-      return 'Printed';
+      return 'Impreso';
     case 'reprinted':
-      return 'Reprinted';
+      return 'Reimpreso';
     default:
       return status;
   }
@@ -1929,7 +1929,7 @@ function AdministrationDashboardPage() {
                                 existingReport.status === 'printed' ||
                                 existingReport.status === 'reprinted'
                                   ? 'active'
-                                  : 'inactive'
+                                  : 'printPending'
                               }`}
                             >
                               {formatVerificationReportStatus(existingReport.status)}
@@ -2037,7 +2037,7 @@ function AdministrationDashboardPage() {
                       </td>
                       <td>
                         <div className='adminVerificationReportStatusCell'>
-                          <span className={`adminBadge ${isCompletedReport ? 'active' : 'inactive'}`}>
+                          <span className={`adminBadge ${isCompletedReport ? 'active' : 'printPending'}`}>
                             {formatVerificationReportStatus(report.status)}
                           </span>
                           <small>{formatDate(report.updatedAt ?? report.createdAt)}</small>
