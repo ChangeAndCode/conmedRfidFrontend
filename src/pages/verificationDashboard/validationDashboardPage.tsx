@@ -71,9 +71,9 @@ const formatModeLabel = (mode: ProgrammingRecordMode) => {
     case 'manual':
       return 'Manual';
     case 'single_scan':
-      return 'Single Scan';
+      return 'Escaneo único';
     case 'double_scan':
-      return 'Doble codigo';
+      return 'Doble código';
     default:
       return mode;
   }
@@ -82,11 +82,11 @@ const formatModeLabel = (mode: ProgrammingRecordMode) => {
 const formatStatusLabel = (status: ProgrammingRecord['status']) => {
   switch (status) {
     case 'captured':
-      return 'Captured';
+      return 'Capturado';
     case 'programmed':
-      return 'Programmed';
+      return 'Programado';
     case 'verified':
-      return 'Verified';
+      return 'Verificado';
     default:
       return status;
   }
@@ -97,9 +97,9 @@ const formatMatchStrategy = (strategy?: ProgrammingRecordMatchStrategy) => {
     case 'manual_raw_reference':
       return 'Folio / parte / referencia manual';
     case 'single_scan_raw':
-      return 'Single scan exacto';
+      return 'Escaneo único exacto';
     case 'double_scan_raw':
-      return 'Doble codigo exacto';
+      return 'Doble código exacto';
     case 'gs1_fields':
       return 'Campos GS1';
     default:
@@ -131,11 +131,11 @@ const formatGs1ManufactureDate = (value?: string) => {
 const formatServiceOrderStatus = (status: ServiceOrder['status']) => {
   switch (status) {
     case 'open':
-      return 'Open';
+      return 'Abierto';
     case 'blocked':
-      return 'Blocked';
+      return 'Bloqueado';
     case 'closed':
-      return 'Closed';
+      return 'Cerrado';
     default:
       return status;
   }
@@ -508,11 +508,10 @@ function ValidationDashboardPage() {
         <div className='verificationDashboardCard'>
           <header className='verificationHeroCard'>
             <div className='verificationHeroCopy'>
-              <p className='verificationEyebrow'>Estacion de verificacion</p>
-              <h1>Validacion de programming records</h1>
+              <p className='verificationEyebrow'>Estación de verificacion</p>
+              <h1>Validación de registros programados</h1>
               <p>
-                Resuelve la evidencia capturada, elige el candidato correcto si hay mas de uno y
-                confirma la verificacion contra el backend.
+                Resuelve la evidencia capturada, elige el candidato correcto si hay más de uno y confirma la verificación contra el sistema.
               </p>
             </div>
 
@@ -534,7 +533,7 @@ function ValidationDashboardPage() {
               <div className='verificationPanelHeader'>
                 <div>
                   <h2>Evidencia</h2>
-                  <p>Elige el modo y captura la evidencia con la que el backend puede resolver el programming record.</p>
+                  <p>Elige el modo y captura la evidencia con la que el sistema puede resolver el registro programado.</p>
                 </div>
               </div>
 
@@ -580,7 +579,7 @@ function ValidationDashboardPage() {
 
                 {mode === 'single_scan' && (
                   <label className='verificationField verificationFieldFull'>
-                    <span>Raw scan</span>
+                    <span>Escaneo original</span>
                     <textarea
                       value={formValues.rawScan}
                       onChange={(event) =>
@@ -599,23 +598,7 @@ function ValidationDashboardPage() {
                 {mode === 'double_scan' && (
                   <>
                     <label className='verificationField'>
-                      <span>First barcode raw</span>
-                      <input
-                        type='text'
-                        value={formValues.firstBarcodeRaw}
-                        onChange={(event) =>
-                          setFormValues((currentValues) => ({
-                            ...currentValues,
-                            firstBarcodeRaw: event.target.value,
-                          }))
-                        }
-                        placeholder='0100851136001566'
-                        disabled={isResolving || isVerifying}
-                      />
-                    </label>
-
-                    <label className='verificationField'>
-                      <span>Second barcode raw</span>
+                      <span>Segundo código original</span>
                       <input
                         type='text'
                         value={formValues.secondBarcodeRaw}
@@ -632,24 +615,9 @@ function ValidationDashboardPage() {
                   </>
                 )}
 
-                <label className='verificationField'>
-                  <span>Verified by</span>
-                  <input
-                    type='text'
-                    value={formValues.verifiedBy}
-                    onChange={(event) =>
-                      setFormValues((currentValues) => ({
-                        ...currentValues,
-                        verifiedBy: event.target.value,
-                      }))
-                    }
-                    placeholder='estacion-verificacion'
-                    disabled={isResolving || isVerifying}
-                  />
-                </label>
-
+                
                 <label className='verificationField verificationFieldFull'>
-                  <span>Verification notes</span>
+                  <span>Notas de verificación</span>
                   <textarea
                     value={formValues.verificationNotes}
                     onChange={(event) =>
@@ -676,7 +644,7 @@ function ValidationDashboardPage() {
                   onClick={() => void handleResolve()}
                   disabled={isResolving || isVerifying}
                 >
-                  {isResolving ? 'Resolviendo...' : 'Resolver programacion'}
+                  {isResolving ? 'Resolviendo...' : 'Resolver programación'}
                 </button>
                 <button
                   className='buttonSelector verificationActionButton'
@@ -694,7 +662,7 @@ function ValidationDashboardPage() {
             <article className='verificationPanelCard'>
               <div className='verificationPanelHeader'>
                 <div>
-                  <h2>Resolucion</h2>
+                  <h2>Resolución</h2>
                   <p>Revisa el match strategy, la entrada normalizada y el conjunto de candidatos.</p>
                 </div>
               </div>
@@ -707,24 +675,24 @@ function ValidationDashboardPage() {
                 <div className='verificationResolutionStack'>
                   <div className='verificationSummaryGrid'>
                     <div className='verificationSummaryItem'>
-                      <span>Resolution type</span>
+                      <span>Tipo de resolución</span>
                       <strong>{resolution.resolutionType}</strong>
                     </div>
                     <div className='verificationSummaryItem'>
-                      <span>Matched by</span>
+                      <span>Coincidencia por</span>
                       <strong>{formatMatchStrategy(resolution.matchedBy)}</strong>
                     </div>
                     <div className='verificationSummaryItem'>
-                      <span>Candidates</span>
+                      <span>Candidatos</span>
                       <strong>{resolution.candidateCount}</strong>
                     </div>
                   </div>
 
                   <div className='verificationNormalizedInputCard'>
-                    <h3>Normalized input</h3>
+                    <h3>Entrada normalizada</h3>
                     <div className='verificationKeyValueGrid'>
                       <div>
-                        <span>Mode</span>
+                        <span>Modo</span>
                         <strong>{formatModeLabel(resolution.normalizedInput.mode)}</strong>
                       </div>
                       <div>
@@ -732,11 +700,11 @@ function ValidationDashboardPage() {
                         <strong>{resolution.normalizedInput.gtin || 'N/D'}</strong>
                       </div>
                       <div>
-                        <span>Lot</span>
+                        <span>Lote</span>
                         <strong>{resolution.normalizedInput.lot || 'N/D'}</strong>
                       </div>
                       <div>
-                        <span>Manufacture date</span>
+                        <span>Fecha de fabricación</span>
                         <strong>{formatGs1ManufactureDate(resolution.normalizedInput.manufactureDate)}</strong>
                       </div>
                       {resolution.normalizedInput.rawReference && (
@@ -747,19 +715,19 @@ function ValidationDashboardPage() {
                       )}
                       {resolution.normalizedInput.rawScan && (
                         <div className='verificationKeyValueFull'>
-                          <span>Raw scan</span>
+                          <span>Escaneo original</span>
                           <strong>{resolution.normalizedInput.rawScan}</strong>
                         </div>
                       )}
                       {resolution.normalizedInput.firstBarcodeRaw && (
                         <div className='verificationKeyValueFull'>
-                          <span>First barcode raw</span>
+                          <span>Primer código original</span>
                           <strong>{resolution.normalizedInput.firstBarcodeRaw}</strong>
                         </div>
                       )}
                       {resolution.normalizedInput.secondBarcodeRaw && (
                         <div className='verificationKeyValueFull'>
-                          <span>Second barcode raw</span>
+                          <span>Segundo código original</span>
                           <strong>{resolution.normalizedInput.secondBarcodeRaw}</strong>
                         </div>
                       )}
@@ -770,14 +738,14 @@ function ValidationDashboardPage() {
                     <table className='verificationTable'>
                       <thead>
                         <tr>
-                          <th>Seleccion</th>
+                          <th>Selección</th>
                           <th>Folio</th>
                           <th>Modo</th>
                           <th>Parte</th>
                           <th>GTIN</th>
                           <th>Lote</th>
                           <th>Fecha</th>
-                          <th>Status</th>
+                          <th>Estado</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -833,14 +801,14 @@ function ValidationDashboardPage() {
             <article className='verificationPanelCard'>
               <div className='verificationPanelHeader'>
                 <div>
-                  <h2>Confirmacion</h2>
+                  <h2>Confirmación</h2>
                   <p>Se verifica contra el candidato seleccionado usando la misma evidencia enviada al resolver.</p>
                 </div>
               </div>
 
               {!selectedProgrammingRecord ? (
                 <p className='verificationEmptyState'>
-                  Selecciona un candidato para revisar sus datos y confirmar la verificacion.
+                  Selecciona un candidato para revisar sus datos y confirmar la verificación.
                 </p>
               ) : (
                 <div className='verificationResolutionStack'>
@@ -863,27 +831,27 @@ function ValidationDashboardPage() {
                         <strong>{selectedProgrammingRecord.gtin || 'N/D'}</strong>
                       </div>
                       <div>
-                        <span>Lot</span>
+                        <span>Lote</span>
                         <strong>{selectedProgrammingRecord.lot || 'N/D'}</strong>
                       </div>
                       <div>
-                        <span>Manufacture date</span>
+                        <span>Fecha de fabricación</span>
                         <strong>{formatGs1ManufactureDate(selectedProgrammingRecord.manufactureDate)}</strong>
                       </div>
                       <div>
-                        <span>RFID Program</span>
+                        <span>Programa RFID</span>
                         <strong>{selectedProgrammingRecord.rfidProgram || 'N/D'}</strong>
                       </div>
                       <div>
-                        <span>Filter label</span>
+                        <span>Etiqueta de filtro</span>
                         <strong>{selectedProgrammingRecord.filterLabel || 'N/D'}</strong>
                       </div>
                       <div>
-                        <span>Created at</span>
+                        <span>Creado el</span>
                         <strong>{formatDateTime(selectedProgrammingRecord.createdAt)}</strong>
                       </div>
                       <div className='verificationKeyValueFull'>
-                        <span>Raw source data</span>
+                        <span>Datos de origen</span>
                         <strong>
                           {selectedProgrammingRecord.rawSourceData.rawReference ||
                             selectedProgrammingRecord.rawSourceData.rawScan ||
@@ -898,7 +866,7 @@ function ValidationDashboardPage() {
                       </div>
                       {selectedProgrammingRecord.verificationData && (
                         <div className='verificationKeyValueFull'>
-                          <span>Verification data</span>
+                          <span>Información de verificación</span>
                           <strong>
                             {selectedProgrammingRecord.verificationData.rawReference ||
                               selectedProgrammingRecord.verificationData.rawScan ||
@@ -912,10 +880,6 @@ function ValidationDashboardPage() {
                           </strong>
                         </div>
                       )}
-                      <div>
-                        <span>Verified by</span>
-                        <strong>{selectedProgrammingRecord.verifiedBy || 'N/D'}</strong>
-                      </div>
                       <div>
                         <span>Verified at</span>
                         <strong>{formatDateTime(selectedProgrammingRecord.verifiedAt)}</strong>
@@ -946,27 +910,27 @@ function ValidationDashboardPage() {
                       ) : relatedServiceOrder ? (
                         <div className='verificationKeyValueGrid'>
                           <div>
-                            <span>Quantity</span>
+                            <span>Cantidad</span>
                             <strong>{relatedServiceOrder.quantity}</strong>
                           </div>
                           <div>
-                            <span>Programmed</span>
+                            <span>Programadas</span>
                             <strong>{getServiceOrderProgrammedCount(relatedServiceOrder)}</strong>
                           </div>
                           <div>
-                            <span>Verified</span>
+                            <span>Verificadas</span>
                             <strong>{getServiceOrderVerifiedCount(relatedServiceOrder)}</strong>
                           </div>
                           <div>
-                            <span>Remaining to program</span>
+                            <span>Restantes por programar</span>
                             <strong>{getServiceOrderRemainingToProgram(relatedServiceOrder)}</strong>
                           </div>
                           <div>
-                            <span>Remaining to verify</span>
+                            <span>Restantes por verificar</span>
                             <strong>{getServiceOrderRemainingToVerify(relatedServiceOrder)}</strong>
                           </div>
                           <div>
-                            <span>Updated at</span>
+                            <span>Actualizado el</span>
                             <strong>{formatDateTime(relatedServiceOrder.updatedAt)}</strong>
                           </div>
                         </div>

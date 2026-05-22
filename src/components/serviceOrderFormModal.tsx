@@ -18,6 +18,7 @@ type ServiceOrderFormValues = {
   quantity: string;
   status: Extract<ServiceOrderStatus, 'open' | 'closed'>;
   notes: string;
+  allowedValidationCodes: string[];
 };
 
 type ServiceOrderFormModalProps = {
@@ -43,6 +44,7 @@ const INITIAL_VALUES: ServiceOrderFormValues = {
   quantity: '',
   status: 'open',
   notes: '',
+  allowedValidationCodes: [],
 };
 
 const buildFormValues = (initialData?: Partial<ServiceOrder>): ServiceOrderFormValues => ({
@@ -54,6 +56,7 @@ const buildFormValues = (initialData?: Partial<ServiceOrder>): ServiceOrderFormV
   quantity: initialData?.quantity ? String(initialData.quantity) : '',
   status: initialData?.status === 'closed' ? 'closed' : 'open',
   notes: initialData?.notes ?? '',
+  allowedValidationCodes: initialData?.allowedValidationCodes ?? [],
 });
 
 const getFolioPrefixByReadingMode = (readingMode: ServiceOrderReadingMode) => {
@@ -107,6 +110,36 @@ function ServiceOrderFormModal({
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [allowedValidationCodeInput, setAllowedValidationCodeInput] = useState('');
+  const handleAddAllowedValidationCode = () => {
+    const nextCode = allowedValidationCodeInput.trim();
+
+    if (!nextCode) {
+      return;
+    }
+
+    const normalizedCode = nextCode.toUpperCase();
+
+    if (values.allowedValidationCodes.includes(normalizedCode)) {
+      setAllowedValidationCodeInput('');
+      return;
+    }
+
+    setValues((currentValues) => ({
+      ...currentValues,
+      allowedValidationCodes: [...currentValues.allowedValidationCodes, normalizedCode],
+    }));
+    setAllowedValidationCodeInput('');
+  };
+
+  const handleRemoveAllowedValidationCode = (codeToRemove: string) => {
+    setValues((currentValues) => ({
+      ...currentValues,
+      allowedValidationCodes: currentValues.allowedValidationCodes.filter(
+        (code) => code !== codeToRemove,
+      ),
+    }));
+  };
   const isEditMode = Boolean(initialData?.folio);
   const isPartNumberBasedOrder =
     values.readingMode === 'manual' || values.readingMode === 'single_scan';
@@ -142,6 +175,7 @@ function ServiceOrderFormModal({
     const gtin = values.gtin.trim();
     const rfidProgram = values.rfidProgram.trim().toUpperCase();
     const notes = values.notes.trim();
+    const allowedValidationCodes = values.allowedValidationCodes.map((code) => code.trim()).filter(Boolean);
     const parsedQuantity = Number.parseInt(values.quantity.trim(), 10);
 
     if (!values.quantity.trim()) {
@@ -215,6 +249,7 @@ function ServiceOrderFormModal({
         quantity: parsedQuantity,
         status: values.status,
         notes: notes || undefined,
+        allowedValidationCodes,
       });
     } catch (error) {
       setErrorMessage(
@@ -236,9 +271,6 @@ function ServiceOrderFormModal({
               numero de parte; doble codigo usa GTIN y RFID Program.
             </p>
           </div>
-          <button className='adminPrimaryButton adminSecondaryButton' type='button' onClick={onClose} disabled={isSubmitting}>
-            Cerrar
-          </button>
         </div>
 
         <form className='adminForm' onSubmit={handleSubmit}>
@@ -385,6 +417,53 @@ function ServiceOrderFormModal({
                 required
               />
             </label>
+
+            <div className='adminField adminFieldFull'>
+              <span>Códigos permitidos para validación</span>
+              <div className='adminInlineControls'>
+                <input
+                  type='text'
+                  value={allowedValidationCodeInput}
+                  onChange={(event) => setAllowedValidationCodeInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      handleAddAllowedValidationCode();
+                    }
+                  }}
+                  placeholder='Escanea o pega un código permitido'
+                  disabled={isSubmitting}
+                />
+                <button
+                  className='adminPrimaryButton'
+                  type='button'
+                  onClick={handleAddAllowedValidationCode}
+                  disabled={isSubmitting || !allowedValidationCodeInput.trim()}
+                >
+                  Agregar
+                </button>
+              </div>
+              <p className='adminFieldHint'>
+                Estos códigos delimitarán qué lecturas se pueden validar contra esta orden de servicio.
+              </p>
+              {values.allowedValidationCodes.length > 0 && (
+                <div className='adminTagList'>
+                  {values.allowedValidationCodes.map((code) => (
+                    <span className='adminTag' key={code}>
+                      {code}
+                      <button
+                        type='button'
+                        onClick={() => handleRemoveAllowedValidationCode(code)}
+                        disabled={isSubmitting}
+                        aria-label={`Quitar código ${code}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {allowStatusSelection && (
               <label className='adminField'>

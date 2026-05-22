@@ -739,6 +739,24 @@
     background: linear-gradient(90deg, #145ed8 0%, #169fdf 100%);
 }
 
+.adminPrimaryButton:disabled,
+.adminSecondaryButton:disabled{
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.adminInlineControls{
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.adminInlineControls input{
+    flex: 1;
+}
+
 /* =========================================
    Information Table Styles Users
 ========================================= */
@@ -889,6 +907,12 @@
 .adminVerificationReportDetailCard .adminTable th,
 .adminVerificationReportDetailCard .adminTable td {
     white-space: normal;
+}
+
+.adminBadge.printPending{
+    color: #b91c1c;
+    background: #fee2e2;
+    border: 1px solid rgba(185, 28, 28, 0.24);
 }
 
 @media (max-width: 1200px) {
