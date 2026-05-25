@@ -66,11 +66,8 @@ function RfidProgramFormModal({
         <div className='adminModalHeader'>
           <div className='adminModalTitleBlock'>
             <h2>{title}</h2>
-            <p>Administra el catalogo de Programas RFID disponibles para seleccionar en numeros de parte.</p>
+            <p>Administra el catálogo de Programas RFID disponibles para seleccionar en numeros de parte.</p>
           </div>
-          <button className='adminPrimaryButton adminSecondaryButton' type='button' onClick={onClose} disabled={isSubmitting}>
-            Cerrar
-          </button>
         </div>
 
         <form className='adminForm' onSubmit={handleSubmit}>
