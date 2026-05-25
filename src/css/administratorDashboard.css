@@ -292,6 +292,10 @@
     flex-wrap: wrap;
 }
 
+.adminToolbar-Info {
+    justify-content: space-between;
+}
+
 .adminToolbarActions {
     display: flex;
     gap: 12px;

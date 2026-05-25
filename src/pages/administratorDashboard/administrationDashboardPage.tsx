@@ -1842,7 +1842,7 @@ function AdministrationDashboardPage() {
         </article>
       </div>
 
-      <div className='adminToolbar'>
+      <div className='adminToolbar adminToolbar-Info'>
         <div>
           <h2>Reportes de verificacion</h2>
           <p>
@@ -1949,7 +1949,7 @@ function AdministrationDashboardPage() {
                                   setSelectedVerificationReport(existingReport);
                                 }}
                               >
-                                Detalle
+                                ✎
                               </button>
                             ) : (
                               <button
@@ -1960,7 +1960,7 @@ function AdministrationDashboardPage() {
                                   setCreatingVerificationReportFor(serviceOrder);
                                 }}
                               >
-                                Generar
+                                ✚
                               </button>
                             )}
                           </div>
@@ -2064,7 +2064,7 @@ function AdministrationDashboardPage() {
                               setSelectedVerificationReport(report);
                             }}
                           >
-                            Detalle
+                            ✎
                           </button>
 
                           {isSupervisor && report.status !== 'print_interrupted' && (
@@ -2079,7 +2079,7 @@ function AdministrationDashboardPage() {
                                 });
                               }}
                             >
-                              Interr.
+                              ‼
                             </button>
                           )}
 
@@ -2095,7 +2095,7 @@ function AdministrationDashboardPage() {
                                 });
                               }}
                             >
-                              Impreso
+                              ✓
                             </button>
                           )}
 
@@ -2111,7 +2111,7 @@ function AdministrationDashboardPage() {
                                 });
                               }}
                             >
-                              Reimp.
+                              ↻
                             </button>
                           )}
                         </div>
