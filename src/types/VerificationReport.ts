@@ -8,6 +8,12 @@ export type VerificationReportStatus =
 
 export type VerificationReportHistoryEventType = VerificationReportStatus;
 
+export interface VerificationReportAvailableActions {
+  canMarkPrinted: boolean;
+  canMarkPrintInterrupted: boolean;
+  canReprint: boolean;
+}
+
 export interface VerificationReportRow {
   programmingRecordId: string;
   programmedAt: string;
@@ -36,6 +42,7 @@ export interface VerificationReport {
   rows: VerificationReportRow[];
   status: VerificationReportStatus;
   history: VerificationReportHistoryEvent[];
+  availableActions?: VerificationReportAvailableActions | null;
   generatedByUserId?: string;
   generatedByUsername?: string;
   lastPrintedAt?: string;

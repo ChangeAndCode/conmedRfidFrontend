@@ -1,4 +1,8 @@
 import type { ServiceOrder } from './ServiceOrder';
+import type {
+  VerificationReportAvailableActions,
+  VerificationReportStatus,
+} from './VerificationReport';
 
 export type ProgrammingRecordMode = 'manual' | 'single_scan' | 'double_scan';
 
@@ -107,6 +111,9 @@ export interface VerifyProgrammingRecordResponse {
     verificationReport?: {
       exists: boolean;
       canGenerate: boolean;
+      reportId: string | null;
+      status: VerificationReportStatus | null;
+      availableActions: VerificationReportAvailableActions | null;
     };
   };
 }

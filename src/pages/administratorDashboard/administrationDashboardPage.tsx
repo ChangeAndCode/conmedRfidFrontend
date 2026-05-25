@@ -11,7 +11,7 @@ import RfidProgramFormModal from '../../components/rfidProgramFormModal';
 import ServiceOrderChangeRequestResolveModal from '../../components/serviceOrderChangeRequestResolveModal';
 import ServiceOrderFormModal from '../../components/serviceOrderFormModal';
 import VerificationReportCreateModal from '../../components/verificationReportCreateModal';
-import VerificationReportDetailModal from '../../components/verificationReportDetailModal';
+import VerificationReportPrintModal from '../../components/verificationReportPrintModal';
 import VerificationReportStatusModal from '../../components/verificationReportStatusModal';
 import ServiceOrderReportModal from '../../components/serviceOrderReportModal';
 import '../../css/administratorDashboard.css';
@@ -104,8 +104,13 @@ type PendingUserAction =
   | { type: 'delete'; user: User };
 
 type PendingVerificationReportAction = {
-  type: 'print_interrupted' | 'printed' | 'reprinted';
   report: VerificationReport;
+};
+
+type VerificationReportPrintFlow = {
+  mode: 'print' | 'reprint';
+  report: VerificationReport;
+  autoStart: boolean;
 };
 
 type AdminSectionId =
@@ -330,8 +335,8 @@ function AdministrationDashboardPage() {
     useState<ServiceOrderChangeRequest | null>(null);
   const [creatingVerificationReportFor, setCreatingVerificationReportFor] =
     useState<ServiceOrder | null>(null);
-  const [selectedVerificationReport, setSelectedVerificationReport] =
-    useState<VerificationReport | null>(null);
+  const [activeVerificationReportPrintFlow, setActiveVerificationReportPrintFlow] =
+    useState<VerificationReportPrintFlow | null>(null);
   const [pendingVerificationReportAction, setPendingVerificationReportAction] =
     useState<PendingVerificationReportAction | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAdminAction | null>(null);
@@ -386,6 +391,46 @@ function AdministrationDashboardPage() {
     (serviceOrder) =>
       !verificationReports.some((report) => report.serviceOrderId === serviceOrder._id),
   );
+
+  const syncVerificationReportState = (nextReport: VerificationReport) => {
+    setVerificationReports((currentReports) => {
+      const existingReport = currentReports.find((report) => report._id === nextReport._id);
+
+      if (!existingReport) {
+        return [nextReport, ...currentReports];
+      }
+
+      return currentReports.map((report) =>
+        report._id === nextReport._id ? nextReport : report,
+      );
+    });
+    setPendingVerificationReportAction((currentAction) =>
+      currentAction?.report._id === nextReport._id
+        ? { report: nextReport }
+        : currentAction,
+    );
+    setActiveVerificationReportPrintFlow((currentFlow) =>
+      currentFlow?.report._id === nextReport._id
+        ? { ...currentFlow, report: nextReport }
+        : currentFlow,
+    );
+  };
+
+  const openVerificationReportPrintFlow = (
+    report: VerificationReport,
+    mode: VerificationReportPrintFlow['mode'],
+    options?: { autoStart?: boolean; clearMessage?: boolean },
+  ) => {
+    if (options?.clearMessage ?? true) {
+      setMessage(null);
+    }
+
+    setActiveVerificationReportPrintFlow({
+      autoStart: options?.autoStart ?? true,
+      mode,
+      report,
+    });
+  };
 
   const loadPartConfigs = async (options?: { clearMessage?: boolean; suppressErrorMessage?: boolean }) => {
     setIsLoading(true);
@@ -614,6 +659,36 @@ function AdministrationDashboardPage() {
     }
   };
 
+  const applyVerificationReportMutation = async (
+    report: VerificationReport,
+    action: 'print_interrupted' | 'printed' | 'reprinted',
+    payload: UpdateVerificationReportStatusPayload = {},
+  ) => {
+    let result;
+
+    switch (action) {
+      case 'print_interrupted':
+        result = await markVerificationReportPrintInterrupted(report._id, payload);
+        break;
+      case 'printed':
+        result = await markVerificationReportAsPrinted(report._id, payload);
+        break;
+      case 'reprinted':
+        result = await reprintVerificationReport(report._id, payload);
+        break;
+      default:
+        throw new Error('La accion seleccionada para el reporte no es valida.');
+    }
+
+    syncVerificationReportState(result.data);
+    setMessage({
+      type: 'success',
+      text: result.message,
+    });
+
+    return result.data;
+  };
+
   useEffect(() => {
     if (isSupervisor) {
       void loadPartConfigs({ clearMessage: false, suppressErrorMessage: true });
@@ -799,14 +874,12 @@ function AdministrationDashboardPage() {
   const handleCreateVerificationReport = async (payload: CreateVerificationReportPayload) => {
     const result = await createVerificationReport(payload);
     setCreatingVerificationReportFor(null);
-    const didRefreshReports = await loadVerificationReports({ clearMessage: false });
-
-    if (didRefreshReports) {
-      setMessage({
-        type: 'success',
-        text: result.message,
-      });
-    }
+    syncVerificationReportState(result.data);
+    setMessage({
+      type: 'success',
+      text: result.message,
+    });
+    openVerificationReportPrintFlow(result.data, 'print', { clearMessage: false });
   };
 
   const handleCreateChangeRequest = async () => {
@@ -843,43 +916,12 @@ function AdministrationDashboardPage() {
       throw new Error('No se encontro la accion de reporte que se quiere ejecutar.');
     }
 
-    let result;
-
-    switch (pendingVerificationReportAction.type) {
-      case 'print_interrupted':
-        result = await markVerificationReportPrintInterrupted(
-          pendingVerificationReportAction.report._id,
-          payload,
-        );
-        break;
-      case 'printed':
-        result = await markVerificationReportAsPrinted(
-          pendingVerificationReportAction.report._id,
-          payload,
-        );
-        break;
-      case 'reprinted':
-        result = await reprintVerificationReport(
-          pendingVerificationReportAction.report._id,
-          payload,
-        );
-        break;
-      default:
-        throw new Error('La accion de reporte seleccionada no es valida.');
-    }
-
-    setPendingVerificationReportAction(null);
-    setSelectedVerificationReport((currentReport) =>
-      currentReport?._id === result.data._id ? result.data : currentReport,
+    await applyVerificationReportMutation(
+      pendingVerificationReportAction.report,
+      'print_interrupted',
+      payload,
     );
-    const didRefreshReports = await loadVerificationReports({ clearMessage: false });
-
-    if (didRefreshReports) {
-      setMessage({
-        type: 'success',
-        text: result.message,
-      });
-    }
+    setPendingVerificationReportAction(null);
   };
 
   const handleMarkServiceOrderAsResolved = (serviceOrder: ServiceOrder) => {
@@ -1945,8 +1987,9 @@ function AdministrationDashboardPage() {
                                 className='adminActionButton'
                                 type='button'
                                 onClick={() => {
-                                  setMessage(null);
-                                  setSelectedVerificationReport(existingReport);
+                                  openVerificationReportPrintFlow(existingReport, 'print', {
+                                    autoStart: false,
+                                  });
                                 }}
                               >
                                 Detalle
@@ -2016,6 +2059,10 @@ function AdministrationDashboardPage() {
                   const latestEvent = getLatestVerificationReportEvent(report);
                   const isCompletedReport =
                     report.status === 'printed' || report.status === 'reprinted';
+                  const canMarkPrinted = report.availableActions?.canMarkPrinted ?? false;
+                  const canMarkPrintInterrupted =
+                    report.availableActions?.canMarkPrintInterrupted ?? false;
+                  const canReprintReport = isAdmin && (report.availableActions?.canReprint ?? false);
 
                   return (
                     <tr key={report._id}>
@@ -2060,21 +2107,33 @@ function AdministrationDashboardPage() {
                             className='adminActionButton'
                             type='button'
                             onClick={() => {
-                              setMessage(null);
-                              setSelectedVerificationReport(report);
+                              openVerificationReportPrintFlow(report, 'print', {
+                                autoStart: false,
+                              });
                             }}
                           >
                             Detalle
                           </button>
 
-                          {isSupervisor && report.status !== 'print_interrupted' && (
+                          {canMarkPrinted && (
+                            <button
+                              className='adminActionButton'
+                              type='button'
+                              onClick={() => {
+                                openVerificationReportPrintFlow(report, 'print');
+                              }}
+                            >
+                              Imprimir
+                            </button>
+                          )}
+
+                          {canMarkPrintInterrupted && (
                             <button
                               className='adminActionButton'
                               type='button'
                               onClick={() => {
                                 setMessage(null);
                                 setPendingVerificationReportAction({
-                                  type: 'print_interrupted',
                                   report,
                                 });
                               }}
@@ -2083,32 +2142,12 @@ function AdministrationDashboardPage() {
                             </button>
                           )}
 
-                          {isSupervisor && report.status !== 'printed' && (
+                          {canReprintReport && (
                             <button
                               className='adminActionButton'
                               type='button'
                               onClick={() => {
-                                setMessage(null);
-                                setPendingVerificationReportAction({
-                                  type: 'printed',
-                                  report,
-                                });
-                              }}
-                            >
-                              Impreso
-                            </button>
-                          )}
-
-                          {isSupervisor && report.status !== 'generated' && (
-                            <button
-                              className='adminActionButton'
-                              type='button'
-                              onClick={() => {
-                                setMessage(null);
-                                setPendingVerificationReportAction({
-                                  type: 'reprinted',
-                                  report,
-                                });
+                                openVerificationReportPrintFlow(report, 'reprint');
                               }}
                             >
                               Reimp.
@@ -2482,10 +2521,33 @@ function AdministrationDashboardPage() {
         />
       )}
 
-      {selectedVerificationReport && (
-        <VerificationReportDetailModal
-          report={selectedVerificationReport}
-          onClose={() => setSelectedVerificationReport(null)}
+      {activeVerificationReportPrintFlow && (
+        <VerificationReportPrintModal
+          report={activeVerificationReportPrintFlow.report}
+          mode={activeVerificationReportPrintFlow.mode}
+          autoStart={activeVerificationReportPrintFlow.autoStart}
+          onClose={() => setActiveVerificationReportPrintFlow(null)}
+          onMarkPrinted={async (payload) => {
+            await applyVerificationReportMutation(
+              activeVerificationReportPrintFlow.report,
+              'printed',
+              payload,
+            );
+          }}
+          onMarkPrintInterrupted={async (payload) => {
+            await applyVerificationReportMutation(
+              activeVerificationReportPrintFlow.report,
+              'print_interrupted',
+              payload,
+            );
+          }}
+          onMarkReprinted={async (payload) => {
+            await applyVerificationReportMutation(
+              activeVerificationReportPrintFlow.report,
+              'reprinted',
+              payload,
+            );
+          }}
         />
       )}
 
@@ -2545,7 +2607,7 @@ function AdministrationDashboardPage() {
       {pendingVerificationReportAction && (
         <VerificationReportStatusModal
           report={pendingVerificationReportAction.report}
-          action={pendingVerificationReportAction.type}
+          action='print_interrupted'
           onClose={() => setPendingVerificationReportAction(null)}
           onSubmit={handleSubmitVerificationReportAction}
         />

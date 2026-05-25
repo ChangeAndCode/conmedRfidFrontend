@@ -1,0 +1,345 @@
+.verificationReportPrintRoot {
+  padding: 28px;
+  overflow-y: auto;
+  z-index: 40;
+}
+
+.verificationReportPrintSurface {
+  width: min(1080px, calc(100vw - 48px));
+  display: grid;
+  gap: 18px;
+  overflow: visible;
+}
+
+.verificationReportPrintChrome {
+  display: grid;
+  gap: 16px;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.verificationReportPrintToolbar,
+.verificationReportPrintOutcomeCard {
+  border-radius: 20px;
+  border: 1px solid rgba(16, 36, 62, 0.12);
+  background: #ffffff;
+  box-shadow: 0 20px 48px rgba(8, 24, 46, 0.12);
+}
+
+.verificationReportPrintToolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 22px;
+  color: #10243e;
+}
+
+.verificationReportPrintToolbarCopy {
+  display: grid;
+  gap: 8px;
+}
+
+.verificationReportPrintToolbarEyebrow {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(16, 36, 62, 0.62);
+}
+
+.verificationReportPrintToolbarCopy h2,
+.verificationReportPrintOutcomeCopy h3 {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #10243e;
+}
+
+.verificationReportPrintToolbarCopy p:last-child,
+.verificationReportPrintOutcomeCopy p {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.verificationReportPrintToolbarActions,
+.verificationReportPrintOutcomeActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.verificationReportPrintOutcomeCard {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  color: #10243e;
+}
+
+.verificationReportPrintOutcomeCopy {
+  display: grid;
+  gap: 8px;
+}
+
+.verificationReportPrintOutcomeField {
+  gap: 10px;
+}
+
+.verificationReportPrintDocument {
+  display: block;
+  padding: 26px 30px 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(16, 36, 62, 0.12);
+  background: #ffffff;
+  box-shadow: 0 18px 40px rgba(8, 24, 46, 0.1);
+  color: #10243e;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.verificationReportPrintMetaHeader {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.verificationReportPrintMetaHeader span:last-child,
+.verificationReportPrintMetaHeader strong:last-child {
+  text-align: center;
+}
+
+.verificationReportPrintTitleSection h1 {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #000000;
+}
+
+.verificationReportPrintSection {
+  display: block;
+  margin-top: 18px;
+}
+
+.verificationReportPrintSection h2 {
+  margin: 0 0 12px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #000000;
+}
+
+.verificationReportPrintHeaderGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.verificationReportPrintField {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid rgba(16, 36, 62, 0.14);
+}
+
+.verificationReportPrintField span,
+.verificationReportPrintSignatureMeta span {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #000000;
+}
+
+.verificationReportPrintField strong,
+.verificationReportPrintSignatureMeta strong {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: #000000;
+}
+
+.verificationReportPrintTableWrapper {
+  overflow-x: auto;
+}
+
+.verificationReportPrintTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.verificationReportPrintTable th,
+.verificationReportPrintTable td {
+  padding: 9px 10px;
+  border: 1px solid #000000;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #000000;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.verificationReportPrintTable th {
+  font-weight: 700;
+  background: #f2f2f2;
+}
+
+.verificationReportPrintEmptyCell {
+  text-align: center;
+}
+
+.verificationReportPrintSignatureSection {
+  break-inside: avoid;
+  break-inside: avoid-page;
+  page-break-inside: avoid;
+}
+
+.verificationReportPrintSignatureGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+  break-inside: avoid;
+  break-inside: avoid-page;
+  page-break-inside: avoid;
+}
+
+.verificationReportPrintSignatureCard {
+  display: grid;
+  gap: 0;
+  break-inside: avoid;
+  break-inside: avoid-page;
+  page-break-inside: avoid;
+}
+
+.verificationReportPrintSignatureBox {
+  min-height: 88px;
+  border: 1px solid rgba(16, 36, 62, 0.16);
+  border-bottom: none;
+}
+
+.verificationReportPrintSignatureMeta {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid rgba(16, 36, 62, 0.16);
+}
+
+@media (max-width: 1024px) {
+  .verificationReportPrintToolbar {
+    flex-direction: column;
+  }
+
+  .verificationReportPrintHeaderGrid,
+  .verificationReportPrintSignatureGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .verificationReportPrintRoot {
+    padding: 16px;
+  }
+
+  .verificationReportPrintSurface {
+    width: min(100vw, calc(100vw - 20px));
+  }
+
+  .verificationReportPrintToolbar,
+  .verificationReportPrintOutcomeCard,
+  .verificationReportPrintDocument {
+    padding: 18px;
+  }
+
+  .verificationReportPrintToolbarActions,
+  .verificationReportPrintOutcomeActions {
+    justify-content: stretch;
+  }
+
+  .verificationReportPrintToolbarActions button,
+  .verificationReportPrintOutcomeActions button {
+    width: 100%;
+  }
+
+  .verificationReportPrintMetaHeader {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .verificationReportPrintMetaHeader span:last-child,
+  .verificationReportPrintMetaHeader strong:last-child {
+    text-align: left;
+  }
+}
+
+@page {
+  size: auto;
+  margin: 12mm;
+}
+
+@media print {
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    background: #ffffff !important;
+  }
+
+  body.printingVerificationReport #root {
+    display: none !important;
+  }
+
+  body.printingVerificationReport .verificationReportPrintRoot {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    min-height: auto !important;
+    height: auto !important;
+    max-height: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    display: block !important;
+  }
+
+  body.printingVerificationReport .verificationReportPrintSurface {
+    width: 100% !important;
+    display: block !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body.printingVerificationReport .verificationReportPrintChrome {
+    display: none !important;
+  }
+
+  body.printingVerificationReport .verificationReportPrintDocument {
+    display: block !important;
+    width: 100% !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+  }
+
+  body.printingVerificationReport .verificationReportPrintSection,
+  body.printingVerificationReport .verificationReportPrintSignatureSection,
+  body.printingVerificationReport .verificationReportPrintSignatureGrid,
+  body.printingVerificationReport .verificationReportPrintSignatureCard {
+    break-inside: avoid;
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+}

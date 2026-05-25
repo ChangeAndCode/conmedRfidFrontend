@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppSceneLayout from '../../components/appSceneLayout';
 import VerificationReportCreateModal from '../../components/verificationReportCreateModal';
+import VerificationReportPrintModal from '../../components/verificationReportPrintModal';
 import { useAuth } from '../../context/useAuth';
 import '../../css/verificationDashboard.css';
 import { getServiceOrderById } from '../../services/serviceOrderService';
@@ -11,6 +12,8 @@ import {
 } from '../../services/programmingRecordService';
 import {
   createVerificationReport,
+  markVerificationReportAsPrinted,
+  markVerificationReportPrintInterrupted,
 } from '../../services/verificationReportService';
 import type {
   ProgrammingRecord,
@@ -22,7 +25,10 @@ import type {
   VerifyProgrammingRecordResponse,
 } from '../../types/ProgrammingRecord';
 import type { ServiceOrder } from '../../types/ServiceOrder';
-import type { CreateVerificationReportPayload } from '../../types/VerificationReport';
+import type {
+  CreateVerificationReportPayload,
+  VerificationReport,
+} from '../../types/VerificationReport';
 
 type FeedbackMessage = {
   type: 'success' | 'error' | 'info';
@@ -196,39 +202,44 @@ function ValidationDashboardPage() {
   const [relatedServiceOrderError, setRelatedServiceOrderError] = useState<string | null>(null);
   const [creatingVerificationReportFor, setCreatingVerificationReportFor] =
     useState<ServiceOrder | null>(null);
+  const [activeVerificationReportPrintFlow, setActiveVerificationReportPrintFlow] =
+    useState<VerificationReport | null>(null);
 
   const selectedProgrammingRecord =
     resolution?.candidates.find((candidate) => candidate._id === selectedProgrammingRecordId) ?? null;
 
-  const loadRelatedServiceOrder = async (serviceOrderId: string): Promise<ServiceOrder | null> => {
-    if (!token) {
-      setRelatedServiceOrder(null);
+  const loadRelatedServiceOrder = useCallback(
+    async (serviceOrderId: string): Promise<ServiceOrder | null> => {
+      if (!token) {
+        setRelatedServiceOrder(null);
+        setRelatedServiceOrderError(null);
+        setIsLoadingRelatedServiceOrder(false);
+        return null;
+      }
+
+      setIsLoadingRelatedServiceOrder(true);
       setRelatedServiceOrderError(null);
-      setIsLoadingRelatedServiceOrder(false);
-      return null;
-    }
 
-    setIsLoadingRelatedServiceOrder(true);
-    setRelatedServiceOrderError(null);
-
-    try {
-      const nextServiceOrder = await getServiceOrderById(serviceOrderId);
-      setRelatedServiceOrder(nextServiceOrder);
-      return nextServiceOrder;
-    } catch (error) {
-      setRelatedServiceOrder(null);
-      setRelatedServiceOrderError(
-        isAuthorizationError(error)
-          ? null
-          : error instanceof Error
-            ? error.message
-            : 'No se pudo consultar el estado de la orden de servicio.',
-      );
-      return null;
-    } finally {
-      setIsLoadingRelatedServiceOrder(false);
-    }
-  };
+      try {
+        const nextServiceOrder = await getServiceOrderById(serviceOrderId);
+        setRelatedServiceOrder(nextServiceOrder);
+        return nextServiceOrder;
+      } catch (error) {
+        setRelatedServiceOrder(null);
+        setRelatedServiceOrderError(
+          isAuthorizationError(error)
+            ? null
+            : error instanceof Error
+              ? error.message
+              : 'No se pudo consultar el estado de la orden de servicio.',
+        );
+        return null;
+      } finally {
+        setIsLoadingRelatedServiceOrder(false);
+      }
+    },
+    [token],
+  );
 
   const maybeOpenVerificationReportModal = (
     serviceOrder?: ServiceOrder | null,
@@ -293,7 +304,7 @@ function ValidationDashboardPage() {
     }
 
     void loadRelatedServiceOrder(serviceOrderId);
-  }, [selectedProgrammingRecord?.serviceOrderId, token]);
+  }, [loadRelatedServiceOrder, selectedProgrammingRecord?.serviceOrderId]);
 
   const buildResolvePayload = (): ResolveProgrammingRecordPayload => {
     if (mode === 'manual') {
@@ -496,6 +507,7 @@ function ValidationDashboardPage() {
   const handleCreateVerificationReport = async (payload: CreateVerificationReportPayload) => {
     const result = await createVerificationReport(payload);
     setCreatingVerificationReportFor(null);
+    setActiveVerificationReportPrintFlow(result.data);
     setMessage({
       type: 'success',
       text: result.message,
@@ -974,6 +986,36 @@ function ValidationDashboardPage() {
           serviceOrder={creatingVerificationReportFor}
           onClose={() => setCreatingVerificationReportFor(null)}
           onSubmit={handleCreateVerificationReport}
+        />
+      )}
+
+      {activeVerificationReportPrintFlow && (
+        <VerificationReportPrintModal
+          report={activeVerificationReportPrintFlow}
+          mode='print'
+          onClose={() => setActiveVerificationReportPrintFlow(null)}
+          onMarkPrinted={async (payload) => {
+            const result = await markVerificationReportAsPrinted(
+              activeVerificationReportPrintFlow._id,
+              payload,
+            );
+            setActiveVerificationReportPrintFlow(result.data);
+            setMessage({
+              type: 'success',
+              text: result.message,
+            });
+          }}
+          onMarkPrintInterrupted={async (payload) => {
+            const result = await markVerificationReportPrintInterrupted(
+              activeVerificationReportPrintFlow._id,
+              payload,
+            );
+            setActiveVerificationReportPrintFlow(result.data);
+            setMessage({
+              type: 'success',
+              text: result.message,
+            });
+          }}
         />
       )}
     </AppSceneLayout>
