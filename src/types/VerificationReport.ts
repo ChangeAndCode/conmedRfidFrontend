@@ -8,6 +8,12 @@ export type VerificationReportStatus =
 
 export type VerificationReportHistoryEventType = VerificationReportStatus;
 
+export interface VerificationReportAvailableActions {
+  canMarkPrinted: boolean;
+  canMarkPrintInterrupted: boolean;
+  canReprint: boolean;
+}
+
 export interface VerificationReportRow {
   programmingRecordId: string;
   programmedAt: string;
@@ -19,6 +25,7 @@ export interface VerificationReportHistoryEvent {
   occurredAt: string;
   performedByUserId?: string;
   performedByUsername?: string;
+  interruptionTitle?: string;
   notes?: string;
 }
 
@@ -36,6 +43,7 @@ export interface VerificationReport {
   rows: VerificationReportRow[];
   status: VerificationReportStatus;
   history: VerificationReportHistoryEvent[];
+  availableActions?: VerificationReportAvailableActions | null;
   generatedByUserId?: string;
   generatedByUsername?: string;
   lastPrintedAt?: string;
@@ -47,11 +55,12 @@ export interface VerificationReport {
 
 export interface CreateVerificationReportPayload {
   serviceOrderId: string;
-  manufacturingRepresentativeName: string;
-  qualityRepresentativeName: string;
+  manufacturingRepresentativeName?: string;
+  qualityRepresentativeName?: string;
 }
 
 export interface UpdateVerificationReportStatusPayload {
+  interruptionId?: string;
   notes?: string;
 }
 

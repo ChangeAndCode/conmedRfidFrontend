@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminLogo from '../../assets/conmedImages/conmedLogo.png';
 import AppSceneLayout from '../../components/appSceneLayout';
@@ -11,7 +11,7 @@ import RfidProgramFormModal from '../../components/rfidProgramFormModal';
 import ServiceOrderChangeRequestResolveModal from '../../components/serviceOrderChangeRequestResolveModal';
 import ServiceOrderFormModal from '../../components/serviceOrderFormModal';
 import VerificationReportCreateModal from '../../components/verificationReportCreateModal';
-import VerificationReportDetailModal from '../../components/verificationReportDetailModal';
+import VerificationReportPrintModal from '../../components/verificationReportPrintModal';
 import VerificationReportStatusModal from '../../components/verificationReportStatusModal';
 import ServiceOrderReportModal from '../../components/serviceOrderReportModal';
 import '../../css/administratorDashboard.css';
@@ -32,12 +32,21 @@ import {
   updatePartConfig,
 } from '../../services/partConfigService';
 import {
+  createPrintInterruption,
+  deletePrintInterruption,
+  listPrintInterruptions,
+} from '../../services/printInterruptionService';
+import {
   activateRfidProgram,
   createRfidProgram,
   deactivateRfidProgram,
   listRfidPrograms,
   updateRfidProgram,
 } from '../../services/rfidProgramService';
+import {
+  getReportResponsibles,
+  updateReportResponsibles,
+} from '../../services/reportResponsiblesService';
 import {
   createServiceOrder,
   createServiceOrderChangeRequest,
@@ -56,7 +65,12 @@ import {
 import { listProgrammingRecords as listProgrammingRecordsService } from '../../services/programmingRecordService';
 import type { Gtin, GtinMutationPayload } from '../../types/Gtin';
 import type { PartConfig, PartConfigMutationPayload } from '../../types/PartConfig';
+import type { PrintInterruption } from '../../types/PrintInterruption';
 import type { ProgrammingRecord } from '../../types/ProgrammingRecord';
+import type {
+  ReportResponsibles,
+  ReportResponsiblesMutationPayload,
+} from '../../types/ReportResponsibles';
 import type { RfidProgram, RfidProgramMutationPayload } from '../../types/RfidProgram';
 import type {
   ResolveServiceOrderChangeRequestPayload,
@@ -104,8 +118,17 @@ type PendingUserAction =
   | { type: 'delete'; user: User };
 
 type PendingVerificationReportAction = {
-  type: 'print_interrupted' | 'printed' | 'reprinted';
   report: VerificationReport;
+};
+
+type PendingPrintInterruptionAction = {
+  interruption: PrintInterruption;
+};
+
+type VerificationReportPrintFlow = {
+  mode: 'print' | 'reprint';
+  report: VerificationReport;
+  autoStart: boolean;
 };
 
 type AdminSectionId =
@@ -113,6 +136,8 @@ type AdminSectionId =
   | 'partNumbers'
   | 'gtin'
   | 'rfidProgram'
+  | 'reportResponsibles'
+  | 'printInterruptions'
   | 'serviceOrder'
   | 'verificationReports'
   | 'users';
@@ -143,6 +168,16 @@ const ADMIN_SECTIONS: AdminSectionDefinition[] = [
     id: 'rfidProgram',
     label: 'RFID Program',
     description: 'Catálogo del Programa RFID disponibles para numeros de parte.',
+  },
+  {
+    id: 'reportResponsibles',
+    label: 'Responsables',
+    description: 'Configura los representantes globales que se congelan al generar reportes.',
+  },
+  {
+    id: 'printInterruptions',
+    label: 'Interrupciones',
+    description: 'Administra el catalogo de causas para impresion interrumpida.',
   },
   {
     id: 'verificationReports',
@@ -254,9 +289,9 @@ const getServiceOrderRemainingToVerify = (serviceOrder: ServiceOrder) =>
 const formatVerificationReportStatus = (status: VerificationReportStatus) => {
   switch (status) {
     case 'generated':
-      return 'Pendiente de impresión';
+      return 'Pendiente';
     case 'print_interrupted':
-      return 'Impresión interrumpida';
+      return 'interrumpido';
     case 'printed':
       return 'Impreso';
     case 'reprinted':
@@ -316,10 +351,19 @@ function AdministrationDashboardPage() {
   const [programmedRecords, setProgrammedRecords] = useState<ProgrammingRecord[]>([]);
   const [verifiedRecords, setVerifiedRecords] = useState<ProgrammingRecord[]>([]);
   const [verificationReports, setVerificationReports] = useState<VerificationReport[]>([]);
+  const [reportResponsibles, setReportResponsibles] = useState<ReportResponsibles | null>(null);
+  const [reportResponsiblesForm, setReportResponsiblesForm] =
+    useState<ReportResponsiblesMutationPayload>({
+      manufacturingRepresentativeName: '',
+      qualityRepresentativeName: '',
+    });
+  const [printInterruptions, setPrintInterruptions] = useState<PrintInterruption[]>([]);
   const [isLoadingServiceOrders, setIsLoadingServiceOrders] = useState(false);
   const [isLoadingChangeRequests, setIsLoadingChangeRequests] = useState(false);
   const [isLoadingProgrammingRecords, setIsLoadingProgrammingRecords] = useState(false);
   const [isLoadingVerificationReports, setIsLoadingVerificationReports] = useState(false);
+  const [isLoadingReportResponsibles, setIsLoadingReportResponsibles] = useState(false);
+  const [isLoadingPrintInterruptions, setIsLoadingPrintInterruptions] = useState(false);
   const [isCreateServiceOrderModalOpen, setIsCreateServiceOrderModalOpen] = useState(false);
   const [editingServiceOrder, setEditingServiceOrder] = useState<ServiceOrder | null>(null);
   const [reportingServiceOrder, setReportingServiceOrder] = useState<ServiceOrder | null>(null);
@@ -330,19 +374,27 @@ function AdministrationDashboardPage() {
     useState<ServiceOrderChangeRequest | null>(null);
   const [creatingVerificationReportFor, setCreatingVerificationReportFor] =
     useState<ServiceOrder | null>(null);
-  const [selectedVerificationReport, setSelectedVerificationReport] =
-    useState<VerificationReport | null>(null);
+  const [activeVerificationReportPrintFlow, setActiveVerificationReportPrintFlow] =
+    useState<VerificationReportPrintFlow | null>(null);
   const [pendingVerificationReportAction, setPendingVerificationReportAction] =
     useState<PendingVerificationReportAction | null>(null);
+  const [pendingPrintInterruptionAction, setPendingPrintInterruptionAction] =
+    useState<PendingPrintInterruptionAction | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAdminAction | null>(null);
   const [pendingGtinAction, setPendingGtinAction] = useState<PendingGtinAction | null>(null);
   const [pendingRfidProgramAction, setPendingRfidProgramAction] =
     useState<PendingRfidProgramAction | null>(null);
   const [pendingUserAction, setPendingUserAction] = useState<PendingUserAction | null>(null);
+  const [newPrintInterruptionTitle, setNewPrintInterruptionTitle] = useState('');
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
   const [isSubmittingGtinAction, setIsSubmittingGtinAction] = useState(false);
   const [isSubmittingRfidProgramAction, setIsSubmittingRfidProgramAction] = useState(false);
   const [isSubmittingUserAction, setIsSubmittingUserAction] = useState(false);
+  const [isSubmittingReportResponsibles, setIsSubmittingReportResponsibles] = useState(false);
+  const [isSubmittingPrintInterruptionCreate, setIsSubmittingPrintInterruptionCreate] =
+    useState(false);
+  const [isSubmittingPrintInterruptionDelete, setIsSubmittingPrintInterruptionDelete] =
+    useState(false);
   const visibleSections = isSupervisor ? SUPERVISOR_SECTIONS : ADMIN_SECTIONS;
 
   const activeSectionConfig =
@@ -386,6 +438,46 @@ function AdministrationDashboardPage() {
     (serviceOrder) =>
       !verificationReports.some((report) => report.serviceOrderId === serviceOrder._id),
   );
+
+  const syncVerificationReportState = (nextReport: VerificationReport) => {
+    setVerificationReports((currentReports) => {
+      const existingReport = currentReports.find((report) => report._id === nextReport._id);
+
+      if (!existingReport) {
+        return [nextReport, ...currentReports];
+      }
+
+      return currentReports.map((report) =>
+        report._id === nextReport._id ? nextReport : report,
+      );
+    });
+    setPendingVerificationReportAction((currentAction) =>
+      currentAction?.report._id === nextReport._id
+        ? { report: nextReport }
+        : currentAction,
+    );
+    setActiveVerificationReportPrintFlow((currentFlow) =>
+      currentFlow?.report._id === nextReport._id
+        ? { ...currentFlow, report: nextReport }
+        : currentFlow,
+    );
+  };
+
+  const openVerificationReportPrintFlow = (
+    report: VerificationReport,
+    mode: VerificationReportPrintFlow['mode'],
+    options?: { autoStart?: boolean; clearMessage?: boolean },
+  ) => {
+    if (options?.clearMessage ?? true) {
+      setMessage(null);
+    }
+
+    setActiveVerificationReportPrintFlow({
+      autoStart: options?.autoStart ?? true,
+      mode,
+      report,
+    });
+  };
 
   const loadPartConfigs = async (options?: { clearMessage?: boolean; suppressErrorMessage?: boolean }) => {
     setIsLoading(true);
@@ -614,6 +706,107 @@ function AdministrationDashboardPage() {
     }
   };
 
+  const loadReportResponsibles = async (options?: {
+    clearMessage?: boolean;
+    suppressErrorMessage?: boolean;
+  }) => {
+    setIsLoadingReportResponsibles(true);
+
+    if (options?.clearMessage ?? true) {
+      setMessage(null);
+    }
+
+    try {
+      const nextReportResponsibles = await getReportResponsibles();
+      setReportResponsibles(nextReportResponsibles);
+      setReportResponsiblesForm({
+        manufacturingRepresentativeName:
+          nextReportResponsibles.manufacturingRepresentativeName,
+        qualityRepresentativeName: nextReportResponsibles.qualityRepresentativeName,
+      });
+      return true;
+    } catch (error) {
+      setReportResponsibles(null);
+      setReportResponsiblesForm({
+        manufacturingRepresentativeName: '',
+        qualityRepresentativeName: '',
+      });
+      if (!(options?.suppressErrorMessage ?? false)) {
+        setMessage({
+          type: 'error',
+          text:
+            error instanceof Error
+              ? error.message
+              : 'No se pudo cargar la configuracion de responsables.',
+        });
+      }
+      return false;
+    } finally {
+      setIsLoadingReportResponsibles(false);
+    }
+  };
+
+  const loadPrintInterruptions = async (options?: {
+    clearMessage?: boolean;
+    suppressErrorMessage?: boolean;
+  }) => {
+    setIsLoadingPrintInterruptions(true);
+
+    if (options?.clearMessage ?? true) {
+      setMessage(null);
+    }
+
+    try {
+      const nextPrintInterruptions = await listPrintInterruptions();
+      setPrintInterruptions(nextPrintInterruptions);
+      return true;
+    } catch (error) {
+      setPrintInterruptions([]);
+      if (!(options?.suppressErrorMessage ?? false)) {
+        setMessage({
+          type: 'error',
+          text:
+            error instanceof Error
+              ? error.message
+              : 'No se pudieron cargar las interrupciones de impresion.',
+        });
+      }
+      return false;
+    } finally {
+      setIsLoadingPrintInterruptions(false);
+    }
+  };
+
+  const applyVerificationReportMutation = async (
+    report: VerificationReport,
+    action: 'print_interrupted' | 'printed' | 'reprinted',
+    payload: UpdateVerificationReportStatusPayload = {},
+  ) => {
+    let result;
+
+    switch (action) {
+      case 'print_interrupted':
+        result = await markVerificationReportPrintInterrupted(report._id, payload);
+        break;
+      case 'printed':
+        result = await markVerificationReportAsPrinted(report._id, payload);
+        break;
+      case 'reprinted':
+        result = await reprintVerificationReport(report._id, payload);
+        break;
+      default:
+        throw new Error('La accion seleccionada para el reporte no es valida.');
+    }
+
+    syncVerificationReportState(result.data);
+    setMessage({
+      type: 'success',
+      text: result.message,
+    });
+
+    return result.data;
+  };
+
   useEffect(() => {
     if (isSupervisor) {
       void loadPartConfigs({ clearMessage: false, suppressErrorMessage: true });
@@ -621,6 +814,7 @@ function AdministrationDashboardPage() {
       void loadChangeRequests({ clearMessage: false });
       void loadGtins({ clearMessage: false, suppressErrorMessage: true });
       void loadRfidPrograms({ clearMessage: false, suppressErrorMessage: true });
+      void loadPrintInterruptions({ clearMessage: false, suppressErrorMessage: true });
       void loadVerificationReports({ clearMessage: false });
       return;
     }
@@ -630,6 +824,8 @@ function AdministrationDashboardPage() {
       void loadGtins({ clearMessage: false });
       void loadRfidPrograms({ clearMessage: false });
       void loadProgrammingRecords({ clearMessage: false });
+      void loadReportResponsibles({ clearMessage: false });
+      void loadPrintInterruptions({ clearMessage: false });
       void loadVerificationReports({ clearMessage: false });
       void loadUsers({ clearMessage: false });
     }
@@ -799,13 +995,97 @@ function AdministrationDashboardPage() {
   const handleCreateVerificationReport = async (payload: CreateVerificationReportPayload) => {
     const result = await createVerificationReport(payload);
     setCreatingVerificationReportFor(null);
-    const didRefreshReports = await loadVerificationReports({ clearMessage: false });
+    syncVerificationReportState(result.data);
+    setMessage({
+      type: 'success',
+      text: result.message,
+    });
+    openVerificationReportPrintFlow(result.data, 'print', { clearMessage: false });
+  };
 
-    if (didRefreshReports) {
+  const handleSaveReportResponsibles = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const manufacturingRepresentativeName =
+      reportResponsiblesForm.manufacturingRepresentativeName.trim();
+    const qualityRepresentativeName = reportResponsiblesForm.qualityRepresentativeName.trim();
+
+    if (!manufacturingRepresentativeName || !qualityRepresentativeName) {
+      setMessage({
+        type: 'error',
+        text: 'Captura ambos responsables antes de guardar.',
+      });
+      return;
+    }
+
+    setIsSubmittingReportResponsibles(true);
+    setMessage(null);
+
+    try {
+      const result = await updateReportResponsibles({
+        manufacturingRepresentativeName,
+        qualityRepresentativeName,
+      });
+
+      setReportResponsibles(result.data);
+      setReportResponsiblesForm({
+        manufacturingRepresentativeName: result.data.manufacturingRepresentativeName,
+        qualityRepresentativeName: result.data.qualityRepresentativeName,
+      });
       setMessage({
         type: 'success',
         text: result.message,
       });
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'No se pudieron actualizar los responsables de reporte.',
+      });
+    } finally {
+      setIsSubmittingReportResponsibles(false);
+    }
+  };
+
+  const handleCreatePrintInterruption = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const title = newPrintInterruptionTitle.trim();
+
+    if (!title) {
+      setMessage({
+        type: 'error',
+        text: 'Captura un titulo para la interrupcion.',
+      });
+      return;
+    }
+
+    setIsSubmittingPrintInterruptionCreate(true);
+    setMessage(null);
+
+    try {
+      const result = await createPrintInterruption({ title });
+      setNewPrintInterruptionTitle('');
+      const didRefreshList = await loadPrintInterruptions({ clearMessage: false });
+
+      if (didRefreshList) {
+        setMessage({
+          type: 'success',
+          text: result.message,
+        });
+      }
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'No se pudo crear la interrupcion de impresion.',
+      });
+    } finally {
+      setIsSubmittingPrintInterruptionCreate(false);
     }
   };
 
@@ -843,43 +1123,12 @@ function AdministrationDashboardPage() {
       throw new Error('No se encontro la accion de reporte que se quiere ejecutar.');
     }
 
-    let result;
-
-    switch (pendingVerificationReportAction.type) {
-      case 'print_interrupted':
-        result = await markVerificationReportPrintInterrupted(
-          pendingVerificationReportAction.report._id,
-          payload,
-        );
-        break;
-      case 'printed':
-        result = await markVerificationReportAsPrinted(
-          pendingVerificationReportAction.report._id,
-          payload,
-        );
-        break;
-      case 'reprinted':
-        result = await reprintVerificationReport(
-          pendingVerificationReportAction.report._id,
-          payload,
-        );
-        break;
-      default:
-        throw new Error('La accion de reporte seleccionada no es valida.');
-    }
-
-    setPendingVerificationReportAction(null);
-    setSelectedVerificationReport((currentReport) =>
-      currentReport?._id === result.data._id ? result.data : currentReport,
+    await applyVerificationReportMutation(
+      pendingVerificationReportAction.report,
+      'print_interrupted',
+      payload,
     );
-    const didRefreshReports = await loadVerificationReports({ clearMessage: false });
-
-    if (didRefreshReports) {
-      setMessage({
-        type: 'success',
-        text: result.message,
-      });
-    }
+    setPendingVerificationReportAction(null);
   };
 
   const handleMarkServiceOrderAsResolved = (serviceOrder: ServiceOrder) => {
@@ -1007,6 +1256,39 @@ function AdministrationDashboardPage() {
       });
     } finally {
       setIsSubmittingRfidProgramAction(false);
+    }
+  };
+
+  const handleConfirmPendingPrintInterruptionAction = async () => {
+    if (!pendingPrintInterruptionAction) {
+      return;
+    }
+
+    setIsSubmittingPrintInterruptionDelete(true);
+
+    try {
+      const result = await deletePrintInterruption(
+        pendingPrintInterruptionAction.interruption._id,
+      );
+      setPendingPrintInterruptionAction(null);
+      const didRefreshList = await loadPrintInterruptions({ clearMessage: false });
+
+      if (didRefreshList) {
+        setMessage({
+          type: 'success',
+          text: result.message,
+        });
+      }
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'No se pudo eliminar la interrupcion de impresion.',
+      });
+    } finally {
+      setIsSubmittingPrintInterruptionDelete(false);
     }
   };
 
@@ -1837,7 +2119,7 @@ function AdministrationDashboardPage() {
           <p>
             {isSupervisor
               ? 'Ordenes cerradas con verificacion completa y aun sin generar.'
-              : 'Suma de reportes en estado printed o reprinted.'}
+              : 'Suma de reportes en estado imprimir o reimprimir.'}
           </p>
         </article>
       </div>
@@ -1945,8 +2227,9 @@ function AdministrationDashboardPage() {
                                 className='adminActionButton'
                                 type='button'
                                 onClick={() => {
-                                  setMessage(null);
-                                  setSelectedVerificationReport(existingReport);
+                                  openVerificationReportPrintFlow(existingReport, 'print', {
+                                    autoStart: false,
+                                  });
                                 }}
                               >
                                 ✎
@@ -2016,6 +2299,10 @@ function AdministrationDashboardPage() {
                   const latestEvent = getLatestVerificationReportEvent(report);
                   const isCompletedReport =
                     report.status === 'printed' || report.status === 'reprinted';
+                  const canMarkPrinted = report.availableActions?.canMarkPrinted ?? false;
+                  const canMarkPrintInterrupted =
+                    report.availableActions?.canMarkPrintInterrupted ?? false;
+                  const canReprintReport = isAdmin && (report.availableActions?.canReprint ?? false);
 
                   return (
                     <tr key={report._id}>
@@ -2051,7 +2338,11 @@ function AdministrationDashboardPage() {
                               : 'Sin eventos'}
                           </strong>
                           <span>{formatDate(latestEvent?.occurredAt)}</span>
-                          <small>{latestEvent?.performedByUsername?.trim() || 'N/D'}</small>
+                          <small>
+                            {latestEvent?.interruptionTitle?.trim()
+                              ? `${latestEvent.performedByUsername?.trim() || 'N/D'} | ${latestEvent.interruptionTitle}`
+                              : latestEvent?.performedByUsername?.trim() || 'N/D'}
+                          </small>
                         </div>
                       </td>
                       <td>
@@ -2060,21 +2351,35 @@ function AdministrationDashboardPage() {
                             className='adminActionButton'
                             type='button'
                             onClick={() => {
-                              setMessage(null);
-                              setSelectedVerificationReport(report);
+                              openVerificationReportPrintFlow(report, 'print', {
+                                autoStart: false,
+                              });
                             }}
                           >
                             ✎
                           </button>
 
-                          {isSupervisor && report.status !== 'print_interrupted' && (
+                          {canMarkPrinted && (
+                            <button
+                              className='adminActionButton'
+                              type='button'
+                              onClick={() => {
+                                openVerificationReportPrintFlow(report, 'print', {
+                                  autoStart: false,
+                                });
+                              }}
+                            >
+                              Imprimir
+                            </button>
+                          )}
+
+                          {canMarkPrintInterrupted && (
                             <button
                               className='adminActionButton'
                               type='button'
                               onClick={() => {
                                 setMessage(null);
                                 setPendingVerificationReportAction({
-                                  type: 'print_interrupted',
                                   report,
                                 });
                               }}
@@ -2083,32 +2388,12 @@ function AdministrationDashboardPage() {
                             </button>
                           )}
 
-                          {isSupervisor && report.status !== 'printed' && (
+                          {canReprintReport && (
                             <button
                               className='adminActionButton'
                               type='button'
                               onClick={() => {
-                                setMessage(null);
-                                setPendingVerificationReportAction({
-                                  type: 'printed',
-                                  report,
-                                });
-                              }}
-                            >
-                              ✓
-                            </button>
-                          )}
-
-                          {isSupervisor && report.status !== 'generated' && (
-                            <button
-                              className='adminActionButton'
-                              type='button'
-                              onClick={() => {
-                                setMessage(null);
-                                setPendingVerificationReportAction({
-                                  type: 'reprinted',
-                                  report,
-                                });
+                                openVerificationReportPrintFlow(report, 'reprint');
                               }}
                             >
                               ↻
@@ -2119,6 +2404,227 @@ function AdministrationDashboardPage() {
                     </tr>
                   );
                 })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  );
+
+  const renderReportResponsiblesSection = () => (
+    <section className='adminSectionStack'>
+      <article className='adminInfoCard'>
+        <div className='adminSectionCardHeader'>
+          <h3>Responsables globales</h3>
+          <p>
+            Estos nombres se congelan automaticamente en cada reporte nuevo de verificacion.
+          </p>
+        </div>
+
+        <div className='adminInfoGrid adminInfoGridCompact'>
+          <div className='adminInfoItem'>
+            <span>Estatus</span>
+            <strong>
+              {isLoadingReportResponsibles
+                ? 'Cargando...'
+                : reportResponsibles?.isConfigured
+                  ? 'Configurado'
+                  : 'Sin configurar'}
+            </strong>
+          </div>
+          <div className='adminInfoItem'>
+            <span>Manufactura actual</span>
+            <strong>{reportResponsibles?.manufacturingRepresentativeName || 'N/D'}</strong>
+          </div>
+          <div className='adminInfoItem'>
+            <span>Calidad actual</span>
+            <strong>{reportResponsibles?.qualityRepresentativeName || 'N/D'}</strong>
+          </div>
+        </div>
+      </article>
+
+      <div className='adminTableCard'>
+        <div className='adminTableHeader'>
+          <h3>Configuracion</h3>
+          <p className='adminTableMeta'>
+            Define los nombres que backend usara por defecto al generar reportes.
+          </p>
+        </div>
+
+        <form className='adminForm' onSubmit={(event) => void handleSaveReportResponsibles(event)}>
+          <div className='adminFormGrid'>
+            <label className='adminField'>
+              <span>Responsable de manufactura</span>
+              <input
+                type='text'
+                value={reportResponsiblesForm.manufacturingRepresentativeName}
+                onChange={(event) =>
+                  setReportResponsiblesForm((currentForm) => ({
+                    ...currentForm,
+                    manufacturingRepresentativeName: event.target.value,
+                  }))
+                }
+                placeholder='Nombre completo'
+                disabled={isLoadingReportResponsibles || isSubmittingReportResponsibles}
+              />
+            </label>
+
+            <label className='adminField'>
+              <span>Responsable de calidad</span>
+              <input
+                type='text'
+                value={reportResponsiblesForm.qualityRepresentativeName}
+                onChange={(event) =>
+                  setReportResponsiblesForm((currentForm) => ({
+                    ...currentForm,
+                    qualityRepresentativeName: event.target.value,
+                  }))
+                }
+                placeholder='Nombre completo'
+                disabled={isLoadingReportResponsibles || isSubmittingReportResponsibles}
+              />
+            </label>
+          </div>
+
+          <div className='adminModalFooter'>
+            <button
+              className='adminPrimaryButton adminSecondaryButton'
+              type='button'
+              onClick={() => void loadReportResponsibles()}
+              disabled={isLoadingReportResponsibles || isSubmittingReportResponsibles}
+            >
+              Recargar
+            </button>
+            <button
+              className='adminPrimaryButton'
+              type='submit'
+              disabled={isLoadingReportResponsibles || isSubmittingReportResponsibles}
+            >
+              {isSubmittingReportResponsibles ? 'Guardando...' : 'Guardar responsables'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
+  );
+
+  const renderPrintInterruptionsSection = () => (
+    <section className='adminSectionStack'>
+      <article className='adminInfoCard'>
+        <div className='adminSectionCardHeader'>
+          <h3>Catalogo de interrupciones</h3>
+          <p>
+            Estas causas pueden seleccionarse al marcar una impresion como interrumpida.
+          </p>
+        </div>
+
+        <div className='adminInfoGrid adminInfoGridCompact'>
+          <div className='adminInfoItem'>
+            <span>Total</span>
+            <strong>{isLoadingPrintInterruptions ? '...' : String(printInterruptions.length)}</strong>
+          </div>
+        </div>
+      </article>
+
+      <div className='adminTableCard'>
+        <div className='adminTableHeader'>
+          <h3>Nueva interrupcion</h3>
+          <p className='adminTableMeta'>
+            Registra causas reutilizables para el flujo de impresion interrumpida.
+          </p>
+        </div>
+
+        <form className='adminForm' onSubmit={(event) => void handleCreatePrintInterruption(event)}>
+          <label className='adminField adminFieldFull'>
+            <span>Titulo</span>
+            <input
+              type='text'
+              value={newPrintInterruptionTitle}
+              onChange={(event) => setNewPrintInterruptionTitle(event.target.value)}
+              placeholder='Ejemplo: Impresora sin tinta'
+              disabled={isSubmittingPrintInterruptionCreate}
+            />
+          </label>
+
+          <div className='adminModalFooter'>
+            <button
+              className='adminPrimaryButton adminSecondaryButton'
+              type='button'
+              onClick={() => void loadPrintInterruptions()}
+              disabled={isLoadingPrintInterruptions || isSubmittingPrintInterruptionCreate}
+            >
+              Recargar
+            </button>
+            <button
+              className='adminPrimaryButton'
+              type='submit'
+              disabled={isSubmittingPrintInterruptionCreate}
+            >
+              {isSubmittingPrintInterruptionCreate ? 'Guardando...' : 'Agregar interrupcion'}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div className='adminTableCard'>
+        <div className='adminTableHeader'>
+          <h3>Listado de interrupciones</h3>
+          <p className='adminTableMeta'>
+            {isLoadingPrintInterruptions
+              ? 'Cargando...'
+              : `${printInterruptions.length} interrupciones registradas`}
+          </p>
+        </div>
+
+        <div className='adminTableWrapper'>
+          <table className='adminTable'>
+            <thead>
+              <tr>
+                <th>Titulo</th>
+                <th>Creacion</th>
+                <th>Ultima actualizacion</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoadingPrintInterruptions ? (
+                <tr>
+                  <td colSpan={4} className='adminTableEmpty'>
+                    Cargando interrupciones...
+                  </td>
+                </tr>
+              ) : printInterruptions.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className='adminTableEmpty'>
+                    No hay interrupciones registradas.
+                  </td>
+                </tr>
+              ) : (
+                printInterruptions.map((printInterruption) => (
+                  <tr key={printInterruption._id}>
+                    <td>{printInterruption.title}</td>
+                    <td>{formatDate(printInterruption.createdAt)}</td>
+                    <td>{formatDate(printInterruption.updatedAt)}</td>
+                    <td>
+                      <div className='adminActionRow adminIconActionRow'>
+                        <button
+                          className='adminActionButton adminIconActionButton adminDeleteGlyphButton delete'
+                          type='button'
+                          title='Eliminar'
+                          onClick={() => {
+                            setMessage(null);
+                            setPendingPrintInterruptionAction({
+                              interruption: printInterruption,
+                            });
+                          }}
+                        >
+                          âœ•
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
@@ -2274,6 +2780,10 @@ function AdministrationDashboardPage() {
         return renderGtinsSection();
       case 'rfidProgram':
         return renderRfidProgramsSection();
+      case 'reportResponsibles':
+        return renderReportResponsiblesSection();
+      case 'printInterruptions':
+        return renderPrintInterruptionsSection();
       case 'serviceOrder':
         return renderServiceOrdersSection();
       case 'verificationReports':
@@ -2482,10 +2992,35 @@ function AdministrationDashboardPage() {
         />
       )}
 
-      {selectedVerificationReport && (
-        <VerificationReportDetailModal
-          report={selectedVerificationReport}
-          onClose={() => setSelectedVerificationReport(null)}
+      {activeVerificationReportPrintFlow && (
+        <VerificationReportPrintModal
+          report={activeVerificationReportPrintFlow.report}
+          mode={activeVerificationReportPrintFlow.mode}
+          autoStart={activeVerificationReportPrintFlow.autoStart}
+          isLoadingPrintInterruptions={isLoadingPrintInterruptions}
+          printInterruptions={printInterruptions}
+          onClose={() => setActiveVerificationReportPrintFlow(null)}
+          onMarkPrinted={async (payload) => {
+            await applyVerificationReportMutation(
+              activeVerificationReportPrintFlow.report,
+              'printed',
+              payload,
+            );
+          }}
+          onMarkPrintInterrupted={async (payload) => {
+            await applyVerificationReportMutation(
+              activeVerificationReportPrintFlow.report,
+              'print_interrupted',
+              payload,
+            );
+          }}
+          onMarkReprinted={async (payload) => {
+            await applyVerificationReportMutation(
+              activeVerificationReportPrintFlow.report,
+              'reprinted',
+              payload,
+            );
+          }}
         />
       )}
 
@@ -2545,9 +3080,23 @@ function AdministrationDashboardPage() {
       {pendingVerificationReportAction && (
         <VerificationReportStatusModal
           report={pendingVerificationReportAction.report}
-          action={pendingVerificationReportAction.type}
+          action='print_interrupted'
+          isLoadingPrintInterruptions={isLoadingPrintInterruptions}
+          printInterruptions={printInterruptions}
           onClose={() => setPendingVerificationReportAction(null)}
           onSubmit={handleSubmitVerificationReportAction}
+        />
+      )}
+
+      {pendingPrintInterruptionAction && (
+        <ConfirmActionModal
+          title='Confirmar eliminacion de interrupcion'
+          message={`Se eliminara la interrupcion "${pendingPrintInterruptionAction.interruption.title}". Deseas continuar?`}
+          confirmLabel='Eliminar'
+          confirmVariant='danger'
+          isSubmitting={isSubmittingPrintInterruptionDelete}
+          onCancel={() => setPendingPrintInterruptionAction(null)}
+          onConfirm={handleConfirmPendingPrintInterruptionAction}
         />
       )}
 

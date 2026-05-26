@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppSceneLayout from '../../components/appSceneLayout';
 import VerificationReportCreateModal from '../../components/verificationReportCreateModal';
+import VerificationReportPrintModal from '../../components/verificationReportPrintModal';
 import { useAuth } from '../../context/useAuth';
 import '../../css/verificationDashboard.css';
+import { listPrintInterruptions } from '../../services/printInterruptionService';
 import { getServiceOrderById } from '../../services/serviceOrderService';
 import {
   resolveProgrammingRecord,
@@ -11,7 +13,12 @@ import {
 } from '../../services/programmingRecordService';
 import {
   createVerificationReport,
+  markVerificationReportAsPrinted,
+  markVerificationReportPrintInterrupted,
 } from '../../services/verificationReportService';
+import type {
+  PrintInterruption,
+} from '../../types/PrintInterruption';
 import type {
   ProgrammingRecord,
   ProgrammingRecordMatchStrategy,
@@ -22,7 +29,10 @@ import type {
   VerifyProgrammingRecordResponse,
 } from '../../types/ProgrammingRecord';
 import type { ServiceOrder } from '../../types/ServiceOrder';
-import type { CreateVerificationReportPayload } from '../../types/VerificationReport';
+import type {
+  CreateVerificationReportPayload,
+  VerificationReport,
+} from '../../types/VerificationReport';
 
 type FeedbackMessage = {
   type: 'success' | 'error' | 'info';
@@ -194,41 +204,74 @@ function ValidationDashboardPage() {
   const [relatedServiceOrder, setRelatedServiceOrder] = useState<ServiceOrder | null>(null);
   const [isLoadingRelatedServiceOrder, setIsLoadingRelatedServiceOrder] = useState(false);
   const [relatedServiceOrderError, setRelatedServiceOrderError] = useState<string | null>(null);
+  const [printInterruptions, setPrintInterruptions] = useState<PrintInterruption[]>([]);
+  const [isLoadingPrintInterruptions, setIsLoadingPrintInterruptions] = useState(false);
   const [creatingVerificationReportFor, setCreatingVerificationReportFor] =
     useState<ServiceOrder | null>(null);
+  const [activeVerificationReportPrintFlow, setActiveVerificationReportPrintFlow] =
+    useState<VerificationReport | null>(null);
 
   const selectedProgrammingRecord =
     resolution?.candidates.find((candidate) => candidate._id === selectedProgrammingRecordId) ?? null;
 
-  const loadRelatedServiceOrder = async (serviceOrderId: string): Promise<ServiceOrder | null> => {
-    if (!token) {
-      setRelatedServiceOrder(null);
+  const loadRelatedServiceOrder = useCallback(
+    async (serviceOrderId: string): Promise<ServiceOrder | null> => {
+      if (!token) {
+        setRelatedServiceOrder(null);
+        setRelatedServiceOrderError(null);
+        setIsLoadingRelatedServiceOrder(false);
+        return null;
+      }
+
+      setIsLoadingRelatedServiceOrder(true);
       setRelatedServiceOrderError(null);
-      setIsLoadingRelatedServiceOrder(false);
-      return null;
+
+      try {
+        const nextServiceOrder = await getServiceOrderById(serviceOrderId);
+        setRelatedServiceOrder(nextServiceOrder);
+        return nextServiceOrder;
+      } catch (error) {
+        setRelatedServiceOrder(null);
+        setRelatedServiceOrderError(
+          isAuthorizationError(error)
+            ? null
+            : error instanceof Error
+              ? error.message
+              : 'No se pudo consultar el estado de la orden de servicio.',
+        );
+        return null;
+      } finally {
+        setIsLoadingRelatedServiceOrder(false);
+      }
+    },
+    [token],
+  );
+
+  const loadPrintInterruptions = useCallback(async () => {
+    if (!token) {
+      setPrintInterruptions([]);
+      setIsLoadingPrintInterruptions(false);
+      return;
     }
 
-    setIsLoadingRelatedServiceOrder(true);
-    setRelatedServiceOrderError(null);
+    setIsLoadingPrintInterruptions(true);
 
     try {
-      const nextServiceOrder = await getServiceOrderById(serviceOrderId);
-      setRelatedServiceOrder(nextServiceOrder);
-      return nextServiceOrder;
+      const nextPrintInterruptions = await listPrintInterruptions();
+      setPrintInterruptions(nextPrintInterruptions);
     } catch (error) {
-      setRelatedServiceOrder(null);
-      setRelatedServiceOrderError(
-        isAuthorizationError(error)
-          ? null
-          : error instanceof Error
+      setPrintInterruptions([]);
+      setMessage((currentMessage) => currentMessage ?? {
+        type: 'error',
+        text:
+          error instanceof Error
             ? error.message
-            : 'No se pudo consultar el estado de la orden de servicio.',
-      );
-      return null;
+            : 'No se pudieron cargar las interrupciones de impresion.',
+      });
     } finally {
-      setIsLoadingRelatedServiceOrder(false);
+      setIsLoadingPrintInterruptions(false);
     }
-  };
+  }, [token]);
 
   const maybeOpenVerificationReportModal = (
     serviceOrder?: ServiceOrder | null,
@@ -283,6 +326,10 @@ function ValidationDashboardPage() {
   }, [user?.username]);
 
   useEffect(() => {
+    void loadPrintInterruptions();
+  }, [loadPrintInterruptions]);
+
+  useEffect(() => {
     const serviceOrderId = selectedProgrammingRecord?.serviceOrderId;
 
     if (!serviceOrderId) {
@@ -293,7 +340,7 @@ function ValidationDashboardPage() {
     }
 
     void loadRelatedServiceOrder(serviceOrderId);
-  }, [selectedProgrammingRecord?.serviceOrderId, token]);
+  }, [loadRelatedServiceOrder, selectedProgrammingRecord?.serviceOrderId]);
 
   const buildResolvePayload = (): ResolveProgrammingRecordPayload => {
     if (mode === 'manual') {
@@ -496,6 +543,7 @@ function ValidationDashboardPage() {
   const handleCreateVerificationReport = async (payload: CreateVerificationReportPayload) => {
     const result = await createVerificationReport(payload);
     setCreatingVerificationReportFor(null);
+    setActiveVerificationReportPrintFlow(result.data);
     setMessage({
       type: 'success',
       text: result.message,
@@ -974,6 +1022,38 @@ function ValidationDashboardPage() {
           serviceOrder={creatingVerificationReportFor}
           onClose={() => setCreatingVerificationReportFor(null)}
           onSubmit={handleCreateVerificationReport}
+        />
+      )}
+
+      {activeVerificationReportPrintFlow && (
+        <VerificationReportPrintModal
+          report={activeVerificationReportPrintFlow}
+          mode='print'
+          isLoadingPrintInterruptions={isLoadingPrintInterruptions}
+          printInterruptions={printInterruptions}
+          onClose={() => setActiveVerificationReportPrintFlow(null)}
+          onMarkPrinted={async (payload) => {
+            const result = await markVerificationReportAsPrinted(
+              activeVerificationReportPrintFlow._id,
+              payload,
+            );
+            setActiveVerificationReportPrintFlow(result.data);
+            setMessage({
+              type: 'success',
+              text: result.message,
+            });
+          }}
+          onMarkPrintInterrupted={async (payload) => {
+            const result = await markVerificationReportPrintInterrupted(
+              activeVerificationReportPrintFlow._id,
+              payload,
+            );
+            setActiveVerificationReportPrintFlow(result.data);
+            setMessage({
+              type: 'success',
+              text: result.message,
+            });
+          }}
         />
       )}
     </AppSceneLayout>

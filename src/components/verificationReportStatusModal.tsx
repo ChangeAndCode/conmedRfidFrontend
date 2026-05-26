@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import type { PrintInterruption } from '../types/PrintInterruption';
 import type { UpdateVerificationReportStatusPayload, VerificationReport } from '../types/VerificationReport';
 
 type VerificationReportStatusAction = 'print_interrupted' | 'printed' | 'reprinted';
@@ -6,6 +7,8 @@ type VerificationReportStatusAction = 'print_interrupted' | 'printed' | 'reprint
 type VerificationReportStatusModalProps = {
   report: VerificationReport;
   action: VerificationReportStatusAction;
+  isLoadingPrintInterruptions?: boolean;
+  printInterruptions?: PrintInterruption[];
   onClose: () => void;
   onSubmit: (payload: UpdateVerificationReportStatusPayload) => Promise<void>;
 };
@@ -53,13 +56,17 @@ const getActionCopy = (action: VerificationReportStatusAction) => {
 function VerificationReportStatusModal({
   report,
   action,
+  isLoadingPrintInterruptions = false,
+  printInterruptions = [],
   onClose,
   onSubmit,
 }: VerificationReportStatusModalProps) {
   const [notes, setNotes] = useState('');
+  const [selectedInterruptionId, setSelectedInterruptionId] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const actionCopy = getActionCopy(action);
+  const shouldShowInterruptionSelector = action === 'print_interrupted';
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -69,6 +76,10 @@ function VerificationReportStatusModal({
 
     try {
       await onSubmit({
+        interruptionId:
+          shouldShowInterruptionSelector && selectedInterruptionId
+            ? selectedInterruptionId
+            : undefined,
         notes: notes.trim() || undefined,
       });
     } catch (error) {
@@ -99,6 +110,29 @@ function VerificationReportStatusModal({
         </div>
 
         <form className='adminForm' onSubmit={handleSubmit}>
+          {shouldShowInterruptionSelector && (
+            <label className='adminField'>
+              <span>Interrupcion</span>
+              <select
+                value={selectedInterruptionId}
+                onChange={(event) => setSelectedInterruptionId(event.target.value)}
+                disabled={isSubmitting || isLoadingPrintInterruptions}
+              >
+                <option value=''>Sin catalogar / opcional</option>
+                {printInterruptions.map((printInterruption) => (
+                  <option key={printInterruption._id} value={printInterruption._id}>
+                    {printInterruption.title}
+                  </option>
+                ))}
+              </select>
+              <small className='adminFieldHint'>
+                {isLoadingPrintInterruptions
+                  ? 'Cargando interrupciones disponibles...'
+                  : 'Selecciona una causa del catalogo si aplica.'}
+              </small>
+            </label>
+          )}
+
           <label className='adminField'>
             <span>Notas</span>
             <textarea

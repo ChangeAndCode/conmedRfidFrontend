@@ -2,7 +2,11 @@ import type { VerificationReport } from '../types/VerificationReport';
 
 type VerificationReportDetailModalProps = {
   report: VerificationReport;
+  canReprint: boolean;
   onClose: () => void;
+  onOpenPrint: (report: VerificationReport) => void;
+  onOpenReprint: (report: VerificationReport) => void;
+  onMarkPrintInterrupted: (report: VerificationReport) => void;
 };
 
 const formatDate = (value?: string) => {
@@ -24,8 +28,16 @@ const formatDate = (value?: string) => {
 
 function VerificationReportDetailModal({
   report,
+  canReprint,
   onClose,
+  onOpenPrint,
+  onOpenReprint,
+  onMarkPrintInterrupted,
 }: VerificationReportDetailModalProps) {
+  const canMarkPrinted = report.availableActions?.canMarkPrinted ?? false;
+  const canMarkPrintInterrupted = report.availableActions?.canMarkPrintInterrupted ?? false;
+  const canReprintReport = canReprint && (report.availableActions?.canReprint ?? false);
+
   return (
     <section className='adminModalOverlay' onClick={onClose}>
       <div className='adminModalCard adminVerificationReportDetailCard' onClick={(event) => event.stopPropagation()}>
@@ -33,13 +45,42 @@ function VerificationReportDetailModal({
           <div className='adminModalTitleBlock'>
             <h2>{`Reporte ${report.serviceOrderFolio}`}</h2>
             <p>
-              Snapshot congelado de la orden verificada, con filas, encabezado y eventos de
-              impresion.
-            </p>
+            Snapshot congelado de la orden verificada, con filas, encabezado y eventos de
+            impresion.
+          </p>
           </div>
-          <button className='adminPrimaryButton adminSecondaryButton' type='button' onClick={onClose}>
-            Cerrar
-          </button>
+          <div className='adminToolbarActions'>
+            {canMarkPrinted && (
+              <button
+                className='adminPrimaryButton'
+                type='button'
+                onClick={() => onOpenPrint(report)}
+              >
+                Imprimir / Guardar PDF
+              </button>
+            )}
+            {canMarkPrintInterrupted && (
+              <button
+                className='adminPrimaryButton adminSecondaryButton'
+                type='button'
+                onClick={() => onMarkPrintInterrupted(report)}
+              >
+                Marcar interrumpida
+              </button>
+            )}
+            {canReprintReport && (
+              <button
+                className='adminPrimaryButton'
+                type='button'
+                onClick={() => onOpenReprint(report)}
+              >
+                Reimprimir
+              </button>
+            )}
+            <button className='adminPrimaryButton adminSecondaryButton' type='button' onClick={onClose}>
+              Cerrar
+            </button>
+          </div>
         </div>
 
         <div className='adminReportDetailGrid'>
@@ -143,13 +184,14 @@ function VerificationReportDetailModal({
                   <th>Evento</th>
                   <th>Fecha</th>
                   <th>Usuario</th>
+                  <th>Interrupcion</th>
                   <th>Notas</th>
                 </tr>
               </thead>
               <tbody>
                 {report.history.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className='adminTableEmpty'>
+                    <td colSpan={5} className='adminTableEmpty'>
                       No hay historial disponible.
                     </td>
                   </tr>
@@ -159,6 +201,7 @@ function VerificationReportDetailModal({
                       <td>{event.type}</td>
                       <td>{formatDate(event.occurredAt)}</td>
                       <td>{event.performedByUsername?.trim() || 'N/D'}</td>
+                      <td>{event.interruptionTitle?.trim() || 'N/D'}</td>
                       <td>{event.notes?.trim() || 'Sin notas'}</td>
                     </tr>
                   ))
