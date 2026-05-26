@@ -2124,7 +2124,7 @@ function AdministrationDashboardPage() {
         </article>
       </div>
 
-      <div className='adminToolbar'>
+      <div className='adminToolbar adminToolbar-Info'>
         <div>
           <h2>Reportes de verificacion</h2>
           <p>
@@ -2232,7 +2232,7 @@ function AdministrationDashboardPage() {
                                   });
                                 }}
                               >
-                                Detalle
+                                ✎
                               </button>
                             ) : (
                               <button
@@ -2243,7 +2243,7 @@ function AdministrationDashboardPage() {
                                   setCreatingVerificationReportFor(serviceOrder);
                                 }}
                               >
-                                Generar
+                                ✚
                               </button>
                             )}
                           </div>
@@ -2356,7 +2356,7 @@ function AdministrationDashboardPage() {
                               });
                             }}
                           >
-                            Detalle
+                            ✎
                           </button>
 
                           {canMarkPrinted && (
@@ -2384,7 +2384,7 @@ function AdministrationDashboardPage() {
                                 });
                               }}
                             >
-                              Interr.
+                              ‼
                             </button>
                           )}
 
@@ -2396,7 +2396,7 @@ function AdministrationDashboardPage() {
                                 openVerificationReportPrintFlow(report, 'reprint');
                               }}
                             >
-                              Reimp.
+                              ↻
                             </button>
                           )}
                         </div>
