@@ -289,9 +289,9 @@ const getServiceOrderRemainingToVerify = (serviceOrder: ServiceOrder) =>
 const formatVerificationReportStatus = (status: VerificationReportStatus) => {
   switch (status) {
     case 'generated':
-      return 'Pendiente de impresión';
+      return 'Pendiente';
     case 'print_interrupted':
-      return 'Impresión interrumpida';
+      return 'interrumpido';
     case 'printed':
       return 'Impreso';
     case 'reprinted':
