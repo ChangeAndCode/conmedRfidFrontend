@@ -5,6 +5,7 @@ import VerificationReportCreateModal from '../../components/verificationReportCr
 import VerificationReportPrintModal from '../../components/verificationReportPrintModal';
 import { useAuth } from '../../context/useAuth';
 import '../../css/verificationDashboard.css';
+import { listPrintInterruptions } from '../../services/printInterruptionService';
 import { getServiceOrderById } from '../../services/serviceOrderService';
 import {
   resolveProgrammingRecord,
@@ -15,6 +16,9 @@ import {
   markVerificationReportAsPrinted,
   markVerificationReportPrintInterrupted,
 } from '../../services/verificationReportService';
+import type {
+  PrintInterruption,
+} from '../../types/PrintInterruption';
 import type {
   ProgrammingRecord,
   ProgrammingRecordMatchStrategy,
@@ -200,6 +204,8 @@ function ValidationDashboardPage() {
   const [relatedServiceOrder, setRelatedServiceOrder] = useState<ServiceOrder | null>(null);
   const [isLoadingRelatedServiceOrder, setIsLoadingRelatedServiceOrder] = useState(false);
   const [relatedServiceOrderError, setRelatedServiceOrderError] = useState<string | null>(null);
+  const [printInterruptions, setPrintInterruptions] = useState<PrintInterruption[]>([]);
+  const [isLoadingPrintInterruptions, setIsLoadingPrintInterruptions] = useState(false);
   const [creatingVerificationReportFor, setCreatingVerificationReportFor] =
     useState<ServiceOrder | null>(null);
   const [activeVerificationReportPrintFlow, setActiveVerificationReportPrintFlow] =
@@ -240,6 +246,32 @@ function ValidationDashboardPage() {
     },
     [token],
   );
+
+  const loadPrintInterruptions = useCallback(async () => {
+    if (!token) {
+      setPrintInterruptions([]);
+      setIsLoadingPrintInterruptions(false);
+      return;
+    }
+
+    setIsLoadingPrintInterruptions(true);
+
+    try {
+      const nextPrintInterruptions = await listPrintInterruptions();
+      setPrintInterruptions(nextPrintInterruptions);
+    } catch (error) {
+      setPrintInterruptions([]);
+      setMessage((currentMessage) => currentMessage ?? {
+        type: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'No se pudieron cargar las interrupciones de impresion.',
+      });
+    } finally {
+      setIsLoadingPrintInterruptions(false);
+    }
+  }, [token]);
 
   const maybeOpenVerificationReportModal = (
     serviceOrder?: ServiceOrder | null,
@@ -292,6 +324,10 @@ function ValidationDashboardPage() {
       };
     });
   }, [user?.username]);
+
+  useEffect(() => {
+    void loadPrintInterruptions();
+  }, [loadPrintInterruptions]);
 
   useEffect(() => {
     const serviceOrderId = selectedProgrammingRecord?.serviceOrderId;
@@ -993,6 +1029,8 @@ function ValidationDashboardPage() {
         <VerificationReportPrintModal
           report={activeVerificationReportPrintFlow}
           mode='print'
+          isLoadingPrintInterruptions={isLoadingPrintInterruptions}
+          printInterruptions={printInterruptions}
           onClose={() => setActiveVerificationReportPrintFlow(null)}
           onMarkPrinted={async (payload) => {
             const result = await markVerificationReportAsPrinted(

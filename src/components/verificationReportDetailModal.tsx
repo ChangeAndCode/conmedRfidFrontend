@@ -184,13 +184,14 @@ function VerificationReportDetailModal({
                   <th>Evento</th>
                   <th>Fecha</th>
                   <th>Usuario</th>
+                  <th>Interrupcion</th>
                   <th>Notas</th>
                 </tr>
               </thead>
               <tbody>
                 {report.history.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className='adminTableEmpty'>
+                    <td colSpan={5} className='adminTableEmpty'>
                       No hay historial disponible.
                     </td>
                   </tr>
@@ -200,6 +201,7 @@ function VerificationReportDetailModal({
                       <td>{event.type}</td>
                       <td>{formatDate(event.occurredAt)}</td>
                       <td>{event.performedByUsername?.trim() || 'N/D'}</td>
+                      <td>{event.interruptionTitle?.trim() || 'N/D'}</td>
                       <td>{event.notes?.trim() || 'Sin notas'}</td>
                     </tr>
                   ))

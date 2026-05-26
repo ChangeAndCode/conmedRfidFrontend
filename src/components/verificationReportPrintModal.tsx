@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import type { PrintInterruption } from '../types/PrintInterruption';
 import type {
   UpdateVerificationReportStatusPayload,
   VerificationReport,
@@ -13,6 +14,8 @@ type VerificationReportPrintModalProps = {
   report: VerificationReport;
   mode: VerificationReportPrintMode;
   autoStart?: boolean;
+  isLoadingPrintInterruptions?: boolean;
+  printInterruptions?: PrintInterruption[];
   onClose: () => void;
   onMarkPrinted: (payload: UpdateVerificationReportStatusPayload) => Promise<void>;
   onMarkPrintInterrupted?: (
@@ -57,18 +60,22 @@ function VerificationReportPrintModal({
   report,
   mode,
   autoStart = true,
+  isLoadingPrintInterruptions = false,
+  printInterruptions = [],
   onClose,
   onMarkPrinted,
   onMarkPrintInterrupted,
   onMarkReprinted,
 }: VerificationReportPrintModalProps) {
   const [notes, setNotes] = useState('');
+  const [selectedInterruptionId, setSelectedInterruptionId] = useState('');
   const [hasAttemptedPrint, setHasAttemptedPrint] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const autoStartRef = useRef(false);
   const printAttemptInProgressRef = useRef(false);
   const screenCopy = getScreenCopy(mode);
+  const shouldShowInterruptionSelector = mode === 'print' && Boolean(onMarkPrintInterrupted);
 
   useEffect(() => {
     const handleAfterPrint = () => {
@@ -156,6 +163,7 @@ function VerificationReportPrintModal({
 
     try {
       await onMarkPrintInterrupted({
+        interruptionId: selectedInterruptionId || undefined,
         notes: notes.trim() || undefined,
       });
       onClose();
@@ -213,6 +221,29 @@ function VerificationReportPrintModal({
                   dialogo nativo. Confirma el resultado para actualizar el estado del reporte.
                 </p>
               </div>
+
+              {shouldShowInterruptionSelector && (
+                <label className='adminField verificationReportPrintOutcomeField'>
+                  <span>Interrupcion</span>
+                  <select
+                    value={selectedInterruptionId}
+                    onChange={(event) => setSelectedInterruptionId(event.target.value)}
+                    disabled={isSubmitting || isLoadingPrintInterruptions}
+                  >
+                    <option value=''>Sin catalogar / opcional</option>
+                    {printInterruptions.map((printInterruption) => (
+                      <option key={printInterruption._id} value={printInterruption._id}>
+                        {printInterruption.title}
+                      </option>
+                    ))}
+                  </select>
+                  <small className='adminFieldHint'>
+                    {isLoadingPrintInterruptions
+                      ? 'Cargando interrupciones disponibles...'
+                      : 'Selecciona una causa del catalogo si aplica.'}
+                  </small>
+                </label>
+              )}
 
               <label className='adminField verificationReportPrintOutcomeField'>
                 <span>Notas</span>

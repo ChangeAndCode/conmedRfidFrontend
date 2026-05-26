@@ -25,6 +25,7 @@ export interface VerificationReportHistoryEvent {
   occurredAt: string;
   performedByUserId?: string;
   performedByUsername?: string;
+  interruptionTitle?: string;
   notes?: string;
 }
 
@@ -54,11 +55,12 @@ export interface VerificationReport {
 
 export interface CreateVerificationReportPayload {
   serviceOrderId: string;
-  manufacturingRepresentativeName: string;
-  qualityRepresentativeName: string;
+  manufacturingRepresentativeName?: string;
+  qualityRepresentativeName?: string;
 }
 
 export interface UpdateVerificationReportStatusPayload {
+  interruptionId?: string;
   notes?: string;
 }
 

@@ -48,26 +48,11 @@ function VerificationReportCreateModal({
   onClose,
   onSubmit,
 }: VerificationReportCreateModalProps) {
-  const [manufacturingRepresentativeName, setManufacturingRepresentativeName] = useState('');
-  const [qualityRepresentativeName, setQualityRepresentativeName] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-
-    const nextManufacturingRepresentativeName = manufacturingRepresentativeName.trim();
-    const nextQualityRepresentativeName = qualityRepresentativeName.trim();
-
-    if (!nextManufacturingRepresentativeName) {
-      setErrorMessage('Captura el nombre del responsable de manufactura.');
-      return;
-    }
-
-    if (!nextQualityRepresentativeName) {
-      setErrorMessage('Captura el nombre del responsable de calidad.');
-      return;
-    }
 
     setIsSubmitting(true);
     setErrorMessage(null);
@@ -75,8 +60,6 @@ function VerificationReportCreateModal({
     try {
       await onSubmit({
         serviceOrderId: serviceOrder._id,
-        manufacturingRepresentativeName: nextManufacturingRepresentativeName,
-        qualityRepresentativeName: nextQualityRepresentativeName,
       });
     } catch (error) {
       setErrorMessage(
@@ -94,18 +77,9 @@ function VerificationReportCreateModal({
           <div className='adminModalTitleBlock'>
             <h2>{`Generar reporte para ${serviceOrder.folio}`}</h2>
             <p>
-              El backend congelara encabezado, filas verificadas y nombres de manufactura/calidad
-              en un solo reporte por orden.
+              Información solicitada para imprimir
             </p>
           </div>
-          <button
-            className='adminPrimaryButton adminSecondaryButton'
-            type='button'
-            onClick={onClose}
-            disabled={isSubmitting}
-          >
-            Cerrar
-          </button>
         </div>
 
         <form className='adminForm' onSubmit={handleSubmit}>
@@ -138,32 +112,6 @@ function VerificationReportCreateModal({
 
           <div className='adminMessage info'>
             {`La orden debe estar cerrada, con todas sus verificaciones completas y con 0 pendientes por verificar. Pendientes actuales: ${getServiceOrderRemainingToVerify(serviceOrder)}.`}
-          </div>
-
-          <div className='adminFormGrid'>
-            <label className='adminField'>
-              <span>Responsable de manufactura</span>
-              <input
-                type='text'
-                value={manufacturingRepresentativeName}
-                onChange={(event) => setManufacturingRepresentativeName(event.target.value)}
-                placeholder='Nombre completo'
-                disabled={isSubmitting}
-                required
-              />
-            </label>
-
-            <label className='adminField'>
-              <span>Responsable de calidad</span>
-              <input
-                type='text'
-                value={qualityRepresentativeName}
-                onChange={(event) => setQualityRepresentativeName(event.target.value)}
-                placeholder='Nombre completo'
-                disabled={isSubmitting}
-                required
-              />
-            </label>
           </div>
 
           {errorMessage && <div className='adminMessage error'>{errorMessage}</div>}
