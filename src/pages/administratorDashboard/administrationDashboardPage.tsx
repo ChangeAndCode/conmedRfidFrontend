@@ -2364,7 +2364,9 @@ function AdministrationDashboardPage() {
                               className='adminActionButton'
                               type='button'
                               onClick={() => {
-                                openVerificationReportPrintFlow(report, 'print');
+                                openVerificationReportPrintFlow(report, 'print', {
+                                  autoStart: false,
+                                });
                               }}
                             >
                               Imprimir
