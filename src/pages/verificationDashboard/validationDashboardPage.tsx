@@ -6,7 +6,10 @@ import VerificationReportPrintModal from '../../components/verificationReportPri
 import { useAuth } from '../../context/useAuth';
 import '../../css/verificationDashboard.css';
 import { listPrintInterruptions } from '../../services/printInterruptionService';
-import { getServiceOrderById } from '../../services/serviceOrderService';
+import {
+  getServiceOrderById,
+  listServiceOrders,
+} from '../../services/serviceOrderService';
 import {
   resolveProgrammingRecord,
   verifyProgrammingRecord,
@@ -171,6 +174,12 @@ const getServiceOrderRemainingToVerify = (serviceOrder?: ServiceOrder | null) =>
     0,
   );
 
+const isServiceOrderVerificationLimitReached = (serviceOrder?: ServiceOrder | null) =>
+  getServiceOrderRemainingToVerify(serviceOrder) <= 0;
+
+const filterServiceOrdersWithVerificationCapacity = (serviceOrders: ServiceOrder[]) =>
+  serviceOrders.filter((serviceOrder) => !isServiceOrderVerificationLimitReached(serviceOrder));
+
 const isServiceOrderReadyForVerificationReport = (serviceOrder?: ServiceOrder | null) =>
   serviceOrder?.status === 'closed' && getServiceOrderRemainingToVerify(serviceOrder) === 0;
 
@@ -210,9 +219,89 @@ function ValidationDashboardPage() {
     useState<ServiceOrder | null>(null);
   const [activeVerificationReportPrintFlow, setActiveVerificationReportPrintFlow] =
     useState<VerificationReport | null>(null);
+  const [isLoadingVerificationOrders, setIsLoadingVerificationOrders] = useState(false);
+  const [verificationOrderOptions, setVerificationOrderOptions] = useState<ServiceOrder[]>([]);
+  const [selectedVerificationServiceOrderId, setSelectedVerificationServiceOrderId] = useState('');
+  const [isVerificationOrderLocked, setIsVerificationOrderLocked] = useState(false);
+  const [verificationOrderMessage, setVerificationOrderMessage] = useState<FeedbackMessage | null>(null);
 
   const selectedProgrammingRecord =
     resolution?.candidates.find((candidate) => candidate._id === selectedProgrammingRecordId) ?? null;
+
+  const selectedVerificationServiceOrder = verificationOrderOptions.find(
+    (serviceOrder) => serviceOrder._id === selectedVerificationServiceOrderId,
+  );
+  const hasSelectedVerificationServiceOrder = Boolean(selectedVerificationServiceOrderId);
+
+  const loadVerificationServiceOrders = useCallback(
+    async (preferredServiceOrderId = selectedVerificationServiceOrderId) => {
+      if (!token) {
+        setVerificationOrderOptions([]);
+        setIsLoadingVerificationOrders(false);
+        return;
+      }
+
+      setIsLoadingVerificationOrders(true);
+      setVerificationOrderMessage(null);
+
+      try {
+        const serviceOrders = await listServiceOrders();
+
+        const availableServiceOrders =
+          filterServiceOrdersWithVerificationCapacity(serviceOrders);
+
+        setVerificationOrderOptions(availableServiceOrders);
+
+        if (
+          preferredServiceOrderId &&
+          !availableServiceOrders.some(
+            (serviceOrder) => serviceOrder._id === preferredServiceOrderId,
+          )
+        ) {
+          setSelectedVerificationServiceOrderId('');
+          setIsVerificationOrderLocked(false);
+          setVerificationOrderMessage({
+            type: 'success',
+            text: 'La orden seleccionada ya completo la cantidad objetivo de verificacion. Puedes seleccionar otra orden.',
+          });
+          return;
+        }
+
+        if (availableServiceOrders.length === 0) {
+          setVerificationOrderMessage({
+            type: 'info',
+            text: 'No hay ordenes de servicio disponibles para verificacion.',
+          });
+        }
+      } catch (error) {
+        setVerificationOrderMessage({
+          type: 'error',
+          text:
+            error instanceof Error
+              ? error.message
+              : 'No se pudieron cargar las ordenes de servicio para verificacion.',
+        });
+      } finally {
+        setIsLoadingVerificationOrders(false);
+      }
+    },
+    [selectedVerificationServiceOrderId, token],
+  );
+
+  const handleVerificationServiceOrderSelection = (nextServiceOrderId: string) => {
+    setSelectedVerificationServiceOrderId(nextServiceOrderId);
+    setVerificationOrderMessage(null);
+
+    if (!nextServiceOrderId) {
+      setIsVerificationOrderLocked(false);
+      return;
+    }
+
+    setVerificationOrderMessage({
+      type: 'info',
+      text: 'Orden seleccionada correctamente. No podra cambiarse al iniciar la verificacion.',
+    });
+  };
 
   const loadRelatedServiceOrder = useCallback(
     async (serviceOrderId: string): Promise<ServiceOrder | null> => {
@@ -297,6 +386,7 @@ function ValidationDashboardPage() {
 
   const resetFormForMode = (nextMode: ProgrammingRecordMode) => {
     setMode(nextMode);
+    setIsVerificationOrderLocked(true);
     setMessage(null);
     resetResolutionState();
     setFormValues((currentValues) => ({
@@ -328,6 +418,10 @@ function ValidationDashboardPage() {
   useEffect(() => {
     void loadPrintInterruptions();
   }, [loadPrintInterruptions]);
+
+  useEffect(() => {
+    void loadVerificationServiceOrders('');
+  }, [loadVerificationServiceOrders]);
 
   useEffect(() => {
     const serviceOrderId = selectedProgrammingRecord?.serviceOrderId;
@@ -411,6 +505,13 @@ function ValidationDashboardPage() {
   };
 
   const handleResolve = async () => {
+    if (!selectedVerificationServiceOrderId) {
+      setVerificationOrderMessage({
+        type: 'error',
+        text: 'Selecciona primero una orden de servicio para verificar.',
+      });
+      return;
+    }
     const validationError = validateCurrentEvidence();
 
     if (validationError) {
@@ -453,6 +554,25 @@ function ValidationDashboardPage() {
   };
 
   const handleVerify = async () => {
+    if (!selectedVerificationServiceOrderId) {
+      setVerificationOrderMessage({
+        type: 'error',
+        text: 'Selecciona primero una orden de servicio para verificar.',
+      });
+      return;
+    }
+
+    if (
+      selectedProgrammingRecord?.serviceOrderId &&
+      selectedProgrammingRecord.serviceOrderId !== selectedVerificationServiceOrderId
+    ) {
+      setMessage({
+        type: 'error',
+        text: 'El registro seleccionado no pertenece a la orden de servicio elegida.',
+      });
+      return;
+    }
+
     if (!selectedProgrammingRecord) {
       setMessage({
         type: 'error',
@@ -516,6 +636,9 @@ function ValidationDashboardPage() {
         type: 'success',
         text: result.message,
       });
+      await loadVerificationServiceOrders(
+        refreshedServiceOrder?._id ?? verifiedProgrammingRecord.serviceOrderId ?? selectedVerificationServiceOrderId,
+      );
 
       maybeOpenVerificationReportModal(
         refreshedServiceOrder,
@@ -575,6 +698,64 @@ function ValidationDashboardPage() {
           </header>
 
           {message && <div className={`verificationMessage ${message.type}`}>{message.text}</div>}
+          <article className='verificationPanelCard'>
+            <div className='verificationPanelHeader'>
+              <div>
+                <h2>Orden de Servicio</h2>
+                <p>Selecciona la orden que se verificara antes de resolver la evidencia.</p>
+              </div>
+            </div>
+
+            <label className='verificationField verificationFieldFull'>
+              <span>Orden de servicio</span>
+              <select
+                aria-label='verificationServiceOrderId'
+                value={selectedVerificationServiceOrderId}
+                onChange={(event) => handleVerificationServiceOrderSelection(event.target.value)}
+                disabled={isLoadingVerificationOrders || isVerificationOrderLocked}
+              >
+                <option value=''>Selecciona</option>
+                {verificationOrderOptions.map((serviceOrder) => (
+                  <option key={serviceOrder._id} value={serviceOrder._id}>
+                    {serviceOrder.folio}
+                    {serviceOrder.rfidProgram ? ` | ${serviceOrder.rfidProgram}` : ''}
+                    {serviceOrder.partNumber ? ` | ${serviceOrder.partNumber}` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {selectedVerificationServiceOrder && (
+              <div className='verificationSummaryGrid'>
+                <div className='verificationSummaryItem'>
+                  <span>Orden seleccionada</span>
+                  <strong>{selectedVerificationServiceOrder.folio}</strong>
+                </div>
+                <div className='verificationSummaryItem'>
+                  <span>Cantidad planeada</span>
+                  <strong>{selectedVerificationServiceOrder.quantity}</strong>
+                </div>
+                <div className='verificationSummaryItem'>
+                  <span>Verificadas</span>
+                  <strong>{getServiceOrderVerifiedCount(selectedVerificationServiceOrder)}</strong>
+                </div>
+                <div className='verificationSummaryItem'>
+                  <span>Restan por verificar</span>
+                  <strong>{getServiceOrderRemainingToVerify(selectedVerificationServiceOrder)}</strong>
+                </div>
+              </div>
+            )}
+
+            {isVerificationOrderLocked && (
+              <p className='verificationHint'>Orden bloqueada hasta completar la cantidad objetivo.</p>
+            )}
+
+            {verificationOrderMessage && (
+              <div className={`verificationMessage ${verificationOrderMessage.type}`}>
+                {verificationOrderMessage.text}
+              </div>
+            )}
+          </article>
 
           <div className='verificationMainGrid'>
             <article className='verificationPanelCard'>
@@ -591,7 +772,18 @@ function ValidationDashboardPage() {
                     key={modeOption}
                     className={`verificationModeButton ${mode === modeOption ? 'active' : ''}`}
                     type='button'
-                    onClick={() => resetFormForMode(modeOption)}
+                    onClick={() => {
+                      if (!selectedVerificationServiceOrderId) {
+                        setVerificationOrderMessage({
+                          type: 'error',
+                          text: 'Selecciona primero una orden de servicio para verificar.',
+                        });
+                        return;
+                      }
+
+                      resetFormForMode(modeOption);
+                    }}
+                    disabled={!hasSelectedVerificationServiceOrder || isResolving || isVerifying}
                   >
                     {formatModeLabel(modeOption)}
                   </button>
@@ -690,7 +882,7 @@ function ValidationDashboardPage() {
                   className='buttonSelector verificationActionButton'
                   type='button'
                   onClick={() => void handleResolve()}
-                  disabled={isResolving || isVerifying}
+                  disabled={isResolving || isVerifying || !hasSelectedVerificationServiceOrder}
                 >
                   {isResolving ? 'Resolviendo...' : 'Resolver programación'}
                 </button>
@@ -998,6 +1190,7 @@ function ValidationDashboardPage() {
                       disabled={
                         isResolving ||
                         isVerifying ||
+                        !hasSelectedVerificationServiceOrder ||
                         selectedProgrammingRecord.status === 'verified'
                       }
                     >
