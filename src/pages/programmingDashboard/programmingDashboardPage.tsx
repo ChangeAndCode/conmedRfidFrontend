@@ -9,6 +9,7 @@ import {
   listOpenServiceOrdersByGtin,
   listOpenManualServiceOrders,
   listServiceOrderPartConfigOptions,
+  listServiceOrders,
 } from '../../services/serviceOrderService';
 import type { DoubleScanReadResponse } from '../../types/DoubleScan';
 import type { ServiceOrder, ServiceOrderPartConfigOption } from '../../types/ServiceOrder';
@@ -124,6 +125,12 @@ function ProgrammingDashboardPage() {
   const [port, setPort] = useState('');
   const [mode, setMode] = useState<Mode>(null);
 
+  const [isLoadingProgrammingOrders, setIsLoadingProgrammingOrders] = useState(false);
+  const [programmingOrderOptions, setProgrammingOrderOptions] = useState<ServiceOrder[]>([]);
+  const [selectedProgrammingServiceOrderId, setSelectedProgrammingServiceOrderId] = useState('');
+  const [isProgrammingOrderLocked, setIsProgrammingOrderLocked] = useState(false);
+  const [programmingOrderMessage, setProgrammingOrderMessage] = useState<FeedbackMessage | null>(null);
+
   const [isLoadingManualServiceOrders, setIsLoadingManualServiceOrders] = useState(false);
   const [isLoadingManualPartOptions, setIsLoadingManualPartOptions] = useState(false);
   const [partNumber, setPartNumber] = useState('');
@@ -183,7 +190,12 @@ function ProgrammingDashboardPage() {
     (serviceOrder) => serviceOrder._id === selectedSingleScanServiceOrderId,
   );
   const selectedServiceOrder = serviceOrderOptions.find((serviceOrder) => serviceOrder._id === selectedServiceOrderId);
+
   const selectedDoubleScanConfig = doubleScanOptions.find((option) => option.id === selectedPartConfigId);
+  const selectedProgrammingServiceOrder = programmingOrderOptions.find(
+    (serviceOrder) => serviceOrder._id === selectedProgrammingServiceOrderId,
+  );
+  const hasSelectedProgrammingServiceOrder = Boolean(selectedProgrammingServiceOrderId);
   const hasMultipleServiceOrderOptions = serviceOrderOptions.length > 1;
   const hasMultipleSingleScanServiceOrderOptions = singleScanServiceOrderOptions.length > 1;
 
@@ -255,6 +267,80 @@ function ProgrammingDashboardPage() {
     };
   }, []);
 
+  const loadProgrammingServiceOrders = async (
+    preferredServiceOrderId = selectedProgrammingServiceOrderId,
+  ) => {
+    setIsLoadingProgrammingOrders(true);
+    setProgrammingOrderMessage(null);
+
+    try {
+      const serviceOrders = await listServiceOrders({
+        status: 'open',
+      });
+
+      const availableServiceOrders =
+        filterServiceOrdersWithProgrammingCapacity(serviceOrders);
+
+      setProgrammingOrderOptions(availableServiceOrders);
+
+      if (
+        preferredServiceOrderId &&
+        !availableServiceOrders.some(
+          (serviceOrder) =>
+            serviceOrder._id === preferredServiceOrderId,
+        )
+      ) {
+        setSelectedProgrammingServiceOrderId('');
+        setIsProgrammingOrderLocked(false);
+
+        setProgrammingOrderMessage({
+          type: 'success',
+          text: 'La orden seleccionada ya completo la cantidad objetivo de programacion. Puedes seleccionar otra orden.',
+        });
+
+        return;
+      }
+
+      if (availableServiceOrders.length === 0) {
+        setProgrammingOrderMessage({
+          type: 'info',
+          text: 'No hay ordenes de servicio abiertas disponibles.',
+        });
+      }
+    } catch (error) {
+      setProgrammingOrderMessage({
+        type: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'No se pudieron cargar las ordenes.',
+      });
+    } finally {
+      setIsLoadingProgrammingOrders(false);
+    }
+  };
+
+  const handleProgrammingServiceOrderSelection = (
+    nextServiceOrderId: string,
+  ) => {
+    setSelectedProgrammingServiceOrderId(nextServiceOrderId);
+    setProgrammingOrderMessage(null);
+
+    if (!nextServiceOrderId) {
+      setIsProgrammingOrderLocked(false);
+      return;
+    }
+
+    setProgrammingOrderMessage({
+      type: 'info',
+      text: 'Orden seleccionada correctamente. No podra cambiarse al iniciar la programacion.',
+    });
+  };
+
+  useEffect(() => {
+    void loadProgrammingServiceOrders();
+  }, []);
+
   const resetManualForm = () => {
     setPartNumber('');
     setManualServiceOrderOptions([]);
@@ -321,9 +407,15 @@ function ProgrammingDashboardPage() {
     setPartNumber('');
 
     try {
-      const serviceOrders = await listOpenManualServiceOrders();
-      const availableServiceOrders =
-        filterServiceOrdersWithProgrammingCapacity(serviceOrders);
+     const serviceOrders = await listOpenManualServiceOrders();
+
+     const availableServiceOrders =
+       filterServiceOrdersWithProgrammingCapacity(
+         serviceOrders.filter(
+           (serviceOrder) =>
+             serviceOrder._id === selectedProgrammingServiceOrderId,
+         ),
+       );
       setManualServiceOrderOptions(availableServiceOrders);
 
       if (availableServiceOrders.length === 0) {
@@ -386,7 +478,12 @@ function ProgrammingDashboardPage() {
         'single_scan',
       );
       const availableServiceOrders =
-        filterServiceOrdersWithProgrammingCapacity(serviceOrders);
+        filterServiceOrdersWithProgrammingCapacity(
+        serviceOrders.filter(
+          (serviceOrder) =>
+          serviceOrder._id === selectedProgrammingServiceOrderId,
+        ),
+      );
 
       setSingleScanRawValue(resolvedScan.rawScan);
       setSingleScanResolvedGtin(resolvedScan.gtin);
@@ -567,6 +664,7 @@ function ProgrammingDashboardPage() {
 
   const openManualModal = () => {
     resetManualForm();
+    setIsProgrammingOrderLocked(true);
     setMode('Manual');
     void loadManualServiceOrders();
   };
@@ -582,12 +680,14 @@ function ProgrammingDashboardPage() {
 
   const openDoubleScanModal = () => {
     resetDoubleScanFlow();
+    setIsProgrammingOrderLocked(true);
     setMode('DoubleScan');
   };
 
   const openSingleScanModal = () => {
     clearSingleScanResetTimeout();
     resetSingleScanForm();
+    setIsProgrammingOrderLocked(true);
     setMode('Scan');
   };
 
@@ -669,6 +769,7 @@ function ProgrammingDashboardPage() {
       setLot('');
       setManufactureDate('');
       const didReloadManualServiceOrders = await loadManualServiceOrders();
+      await loadProgrammingServiceOrders(selectedManualServiceOrderId);
 
       if (didReloadManualServiceOrders) {
         setManualMessage({
@@ -793,6 +894,7 @@ function ProgrammingDashboardPage() {
         type: 'success',
         text: result.message ?? 'Lectura single scan registrada.',
       });
+      await loadProgrammingServiceOrders(selectedSingleScanServiceOrderId);
 
       singleScanResetTimeoutRef.current = window.setTimeout(() => {
         resetSingleScanForm();
@@ -846,7 +948,12 @@ function ProgrammingDashboardPage() {
       const result = await resolveFirstDoubleScan(trimmedFirstBarcode);
       const matchingServiceOrders = await listOpenServiceOrdersByGtin(result.gtin);
       const availableServiceOrders =
-        filterServiceOrdersWithProgrammingCapacity(matchingServiceOrders);
+      filterServiceOrdersWithProgrammingCapacity(
+        matchingServiceOrders.filter(
+          (serviceOrder) =>
+            serviceOrder._id === selectedProgrammingServiceOrderId,
+        ),
+      );
 
       setFirstBarcodeRaw(result.firstBarcodeRaw);
       setResolvedGtin(result.gtin);
@@ -1008,6 +1115,7 @@ function ProgrammingDashboardPage() {
           result.message ??
           'Lectura doble registrada. El formulario se preparara automaticamente para la siguiente pieza.',
       });
+      await loadProgrammingServiceOrders(selectedServiceOrderId);
 
       successResetTimeoutRef.current = window.setTimeout(() => {
         resetDoubleScanCycle({
@@ -1076,14 +1184,86 @@ function ProgrammingDashboardPage() {
                 <option value='port2'>COM 5</option>
               </select>
             </div>
+            <div>
+            <h2>Orden de Servicio</h2>
+
+            <select
+              aria-label='programmingServiceOrderId'
+              value={selectedProgrammingServiceOrderId}
+              onChange={(event) =>
+                handleProgrammingServiceOrderSelection(
+                  event.target.value,
+                )
+              }
+              disabled={isLoadingProgrammingOrders || isProgrammingOrderLocked}
+            >
+              <option value=''>Selecciona</option>
+
+              {programmingOrderOptions.map((serviceOrder) => (
+                <option
+                  key={serviceOrder._id}
+                  value={serviceOrder._id}
+                >
+                  {serviceOrder.folio}
+                  {serviceOrder.rfidProgram
+                    ? ` | ${serviceOrder.rfidProgram}`
+                    : ''}
+                  {serviceOrder.partNumber
+                    ? ` | ${serviceOrder.partNumber}`
+                    : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+        {selectedProgrammingServiceOrder && (
+          <div className='scanSummaryBlock'>
+            <p>
+              Orden seleccionada:
+              {' '}
+              {selectedProgrammingServiceOrder.folio}
+            </p>
+
+            <p>
+              Cantidad planeada:
+              {' '}
+              {selectedProgrammingServiceOrder.quantity}
+            </p>
+
+            <p>
+              Programados:
+              {' '}
+              {getServiceOrderProgrammedCount(
+                selectedProgrammingServiceOrder,
+              )}
+            </p>
+
+            <p>
+              Restan por programar:
+              {' '}
+              {getServiceOrderRemainingToProgram(
+                selectedProgrammingServiceOrder,
+              )}
+            </p>
+            {isProgrammingOrderLocked && (
+              <p>Orden bloqueada hasta completar la cantidad objetivo.</p>
+            )}
+          </div>
+        )}
+
+        {programmingOrderMessage && (
+          <p className={`manualMessage ${programmingOrderMessage.type}`}>
+            {programmingOrderMessage.text}
+          </p>
+        )}
             <div className='buttonBox'>
-              <button className='adminPrimaryButton' onClick={openManualModal} disabled={!port}>
+              <button className='adminPrimaryButton' onClick={openManualModal} disabled={!port || !hasSelectedProgrammingServiceOrder}>
                 Ingreso Manual
               </button>
-              <button className='adminPrimaryButton' onClick={openSingleScanModal} disabled={!port}>
+              <button className='adminPrimaryButton' onClick={openSingleScanModal} disabled={!port || !hasSelectedProgrammingServiceOrder}>
                 Escaner Codigo
               </button>
-              <button className='adminPrimaryButton' onClick={openDoubleScanModal} disabled={!port}>
+              <button className='adminPrimaryButton' onClick={openDoubleScanModal} disabled={!port || !hasSelectedProgrammingServiceOrder}>
                 Doble Codigo
               </button>
             </div>
