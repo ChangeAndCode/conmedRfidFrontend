@@ -43,5 +43,11 @@ export async function createDoubleScanRead(payload: CreateDoubleScanPayload) {
     throw new Error(result?.message ?? 'No se pudo registrar la lectura doble.');
   }
 
-  return result ?? { message: 'Lectura doble registrada.' };
+  if (!result?.programmingRecord?.id) {
+    throw new Error(
+      'La respuesta del backend no incluye el programming record de la lectura doble.',
+    );
+  }
+
+  return result;
 }

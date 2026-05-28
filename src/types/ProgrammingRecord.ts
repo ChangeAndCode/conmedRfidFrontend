@@ -24,6 +24,12 @@ export type ProgrammingRecordResolutionType =
   | 'single_match'
   | 'multiple_matches';
 
+export interface ProgrammingRecordCaptureReference {
+  id: string;
+  mode: ProgrammingRecordMode;
+  status: ProgrammingRecordStatus;
+}
+
 export interface ProgrammingRawSourceData {
   rawReference?: string;
   rawScan?: string;

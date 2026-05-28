@@ -44,5 +44,11 @@ export async function createSingleScanRead(payload: CreateSingleScanPayload) {
     throw new Error(result?.message ?? 'No se pudo registrar la lectura single scan.');
   }
 
-  return result ?? { message: 'Lectura single scan registrada.' };
+  if (!result?.programmingRecord?.id) {
+    throw new Error(
+      'La respuesta del backend no incluye el programming record de la lectura single scan.',
+    );
+  }
+
+  return result;
 }
