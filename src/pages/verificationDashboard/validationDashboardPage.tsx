@@ -235,12 +235,7 @@ function ValidationDashboardPage() {
 
   const loadVerificationServiceOrders = useCallback(
     async (preferredServiceOrderId = selectedVerificationServiceOrderId) => {
-      if (!token) {
-        setVerificationOrderOptions([]);
-        setIsLoadingVerificationOrders(false);
-        return;
-      }
-
+      
       setIsLoadingVerificationOrders(true);
       setVerificationOrderMessage(null);
 
@@ -285,7 +280,7 @@ function ValidationDashboardPage() {
         setIsLoadingVerificationOrders(false);
       }
     },
-    [selectedVerificationServiceOrderId, token],
+    [selectedVerificationServiceOrderId],
   );
 
   const handleVerificationServiceOrderSelection = (nextServiceOrderId: string) => {

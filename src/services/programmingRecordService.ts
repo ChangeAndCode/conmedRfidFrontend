@@ -40,9 +40,7 @@ export async function listProgrammingRecords(
       rfidProgram: filters?.rfidProgram,
       status: filters?.status,
     })}`,
-    {
-      headers: buildAuthHeaders(),
-    },
+    
   );
 
   const result = (await response.json().catch(() => null)) as
