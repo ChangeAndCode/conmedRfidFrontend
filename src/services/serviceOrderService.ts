@@ -45,9 +45,6 @@ export async function listServiceOrders(filters?: {
       gtin: filters?.gtin,
       status: filters?.status,
     })}`,
-    {
-      headers: buildAuthHeaders(),
-    },
   );
 
   const result = (await response.json().catch(() => null)) as
