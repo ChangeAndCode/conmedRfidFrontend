@@ -113,6 +113,92 @@ const executeConfiguredHardwareCommand = async (template, replacements) => {
   return stdout.trim()
 }
 
+const readPowerShellStdout = async (command) => {
+  try {
+    const { stdout } = await runPowerShell(command)
+    return stdout.trim()
+  } catch (error) {
+    if (typeof error?.stdout === 'string' && error.stdout.trim()) {
+      return error.stdout.trim()
+    }
+
+    return ''
+  }
+}
+
+const parseJsonOutput = (stdout) => {
+  if (!stdout) {
+    return []
+  }
+
+  try {
+    const parsed = JSON.parse(stdout)
+    return Array.isArray(parsed) ? parsed : [parsed]
+  } catch {
+    return []
+  }
+}
+
+const cleanWindowsDeviceLabel = (value) => {
+  if (!value) {
+    return ''
+  }
+
+  const normalizedValue = String(value).trim()
+  const semicolonIndex = normalizedValue.lastIndexOf(';')
+
+  return semicolonIndex >= 0
+    ? normalizedValue.slice(semicolonIndex + 1).trim()
+    : normalizedValue
+}
+
+const removeEmbeddedComPort = (value, portName) =>
+  value.replace(new RegExp(`\\s*\\(${portName}\\)$`, 'i'), '').trim()
+
+const buildSerialPortDisplayName = (portName, metadata) => {
+  const candidateLabel =
+    cleanWindowsDeviceLabel(metadata?.FriendlyName) ||
+    cleanWindowsDeviceLabel(metadata?.DeviceDesc)
+
+  if (!candidateLabel) {
+    return portName
+  }
+
+  const cleanedLabel = removeEmbeddedComPort(candidateLabel, portName)
+
+  if (!cleanedLabel || cleanedLabel.toUpperCase() === portName.toUpperCase()) {
+    return portName
+  }
+
+  return `${portName} | ${cleanedLabel}`
+}
+
+const buildSerialPortDescription = (portName, metadata, fallbackDescription) => {
+  const descriptionParts = []
+  const cleanedFriendlyName = cleanWindowsDeviceLabel(metadata?.FriendlyName)
+  const cleanedDeviceDescription = cleanWindowsDeviceLabel(metadata?.DeviceDesc)
+  const cleanedManufacturer = cleanWindowsDeviceLabel(metadata?.Mfg)
+
+  if (cleanedFriendlyName) {
+    descriptionParts.push(removeEmbeddedComPort(cleanedFriendlyName, portName))
+  }
+
+  if (
+    cleanedDeviceDescription &&
+    cleanedDeviceDescription.toLowerCase() !== cleanedFriendlyName.toLowerCase()
+  ) {
+    descriptionParts.push(cleanedDeviceDescription)
+  }
+
+  if (cleanedManufacturer) {
+    descriptionParts.push(`Fabricante: ${cleanedManufacturer}`)
+  }
+
+  return descriptionParts.length > 0
+    ? descriptionParts.join(' | ')
+    : fallbackDescription
+}
+
 const getConfiguredHardwareCommand = (connectionMethod, action) => {
   if (connectionMethod === 'serial_port') {
     return action === 'read'
@@ -147,6 +233,51 @@ const resolveAdbExecutable = async () => {
   } catch {
     return null
   }
+}
+
+const listSerialPortMetadata = async (portNames) => {
+  if (!Array.isArray(portNames) || portNames.length === 0) {
+    return new Map()
+  }
+
+  const quotedPortNames = portNames
+    .map((portName) => `'${String(portName).replace(/'/g, "''")}'`)
+    .join(',')
+
+  const stdout = await readPowerShellStdout(`
+$ports = @(${quotedPortNames})
+Get-ChildItem 'HKLM:\\SYSTEM\\CurrentControlSet\\Enum' -Recurse -ErrorAction SilentlyContinue |
+  Where-Object { $_.PSChildName -eq 'Device Parameters' } |
+  ForEach-Object {
+    try {
+      $props = Get-ItemProperty $_.PSPath -ErrorAction Stop
+      if ($ports -contains $props.PortName) {
+        $parentPath = Split-Path $_.PSPath -Parent
+        $parent = Get-ItemProperty $parentPath -ErrorAction SilentlyContinue
+        [pscustomobject]@{
+          PortName = $props.PortName
+          FriendlyName = $parent.FriendlyName
+          DeviceDesc = $parent.DeviceDesc
+          Mfg = $parent.Mfg
+        }
+      }
+    } catch {}
+  } | ConvertTo-Json -Compress
+`)
+
+  const metadataByPortName = new Map()
+
+  parseJsonOutput(stdout).forEach((entry) => {
+    const normalizedPortName = String(entry?.PortName ?? '').trim().toUpperCase()
+
+    if (!normalizedPortName) {
+      return
+    }
+
+    metadataByPortName.set(normalizedPortName, entry)
+  })
+
+  return metadataByPortName
 }
 
 const listSerialPortDevices = async () => {
@@ -203,6 +334,27 @@ const listSerialPortDevices = async () => {
     } catch {
       // Si esto falla, se regresara simulacion si esta habilitada.
     }
+  }
+
+  if (discoveredPorts.size > 0) {
+    const metadataByPortName = await listSerialPortMetadata(
+      Array.from(discoveredPorts.keys()),
+    )
+
+    discoveredPorts.forEach((device, portName) => {
+      const metadata = metadataByPortName.get(portName)
+
+      if (!metadata) {
+        return
+      }
+
+      device.name = buildSerialPortDisplayName(portName, metadata)
+      device.description = buildSerialPortDescription(
+        portName,
+        metadata,
+        device.description,
+      )
+    })
   }
 
   return Array.from(discoveredPorts.values())

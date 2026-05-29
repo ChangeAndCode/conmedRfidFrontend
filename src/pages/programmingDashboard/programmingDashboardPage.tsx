@@ -2386,6 +2386,7 @@ function ProgrammingDashboardPage() {
 
       {pendingRfidSession && isRfidModalOpen && (
         <RfidProgrammingModal
+          key={pendingRfidSession.programmingRecordId}
           session={pendingRfidSession}
           onClose={handleClosePendingRfidModal}
           onCompleted={handleRfidProgrammingCompleted}

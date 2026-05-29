@@ -23,7 +23,7 @@ export interface BuildRfidPayloadData {
   tagByteLength?: number;
   tagId: string;
   partNumber?: string;
-  legacyPartMapping?: string | null;
+  legacyPartMapping?: string | Record<string, unknown> | null;
 }
 
 export interface BuildRfidPayloadResponse {
