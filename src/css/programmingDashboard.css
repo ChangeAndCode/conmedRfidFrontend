@@ -259,6 +259,10 @@
     flex-wrap: wrap;
 }
 
+.rfidProgrammingActionRowCompact{
+    margin-top: 8px;
+}
+
 @media (max-width: 768px){
     .square.programmingDashboardShell{
         width: min(100vw, calc(100vw - 28px));

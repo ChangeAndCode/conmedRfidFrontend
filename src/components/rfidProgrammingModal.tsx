@@ -24,6 +24,7 @@ type ProgrammingStage =
   | 'idle'
   | 'reading_tag'
   | 'building_payload'
+  | 'awaiting_manual_write'
   | 'writing_tag'
   | 'completing'
   | 'success'
@@ -42,6 +43,8 @@ const getStageLabel = (stage: ProgrammingStage) => {
       return 'Leyendo tagId desde el hardware...';
     case 'building_payload':
       return 'Construyendo payload RFID con el backend...';
+    case 'awaiting_manual_write':
+      return 'Payload generado. Escribelo manualmente en NFC Tools y luego confirma la programacion.';
     case 'writing_tag':
       return 'Escribiendo payload en la etiqueta...';
     case 'completing':
@@ -66,6 +69,9 @@ function RfidProgrammingModal({
   const [stage, setStage] = useState<ProgrammingStage>('idle');
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [copiedPayload, setCopiedPayload] = useState(false);
+
+  const isAndroidManualAssisted = session.connectionMethod === 'android_usb_nfc';
 
   useEffect(() => {
     setTagId('');
@@ -74,6 +80,7 @@ function RfidProgrammingModal({
     setStage('idle');
     setErrorMessage(null);
     setInfoMessage(null);
+    setCopiedPayload(false);
   }, [session.programmingRecordId]);
 
   const isBusy =
@@ -99,6 +106,9 @@ function RfidProgrammingModal({
           ? `TagId generado en modo simulado: ${result.tagId}.`
           : `TagId leido correctamente: ${result.tagId}.`,
       );
+      setPayloadData(null);
+      setWriteResult(null);
+      setCopiedPayload(false);
     } catch (error) {
       setStage('error');
       setErrorMessage(
@@ -109,7 +119,7 @@ function RfidProgrammingModal({
     }
   };
 
-  const handleProgramTag = async () => {
+  const handleBuildPayload = async () => {
     const trimmedTagId = tagId.trim();
 
     if (!trimmedTagId) {
@@ -127,7 +137,16 @@ function RfidProgrammingModal({
         trimmedTagId,
       );
       setPayloadData(payloadResult.data);
-      setInfoMessage(payloadResult.message);
+      setWriteResult(null);
+      setCopiedPayload(false);
+
+      if (isAndroidManualAssisted) {
+        setStage('awaiting_manual_write');
+        setInfoMessage(
+          `${payloadResult.message} Copialo en NFC Tools > Escribir > Texto y luego confirma aqui.`,
+        );
+        return;
+      }
 
       setStage('writing_tag');
       const nextWriteResult = await writeHardwarePayload({
@@ -147,21 +166,11 @@ function RfidProgrammingModal({
       setWriteResult(nextWriteResult);
 
       setStage('completing');
-      const completionPayload = {
-        connectionMethod: session.connectionMethod,
-        tagId: trimmedTagId,
-        payloadHex: payloadResult.data.payloadHex,
-        authCode: payloadResult.data.authCode,
-        deviceName: session.device.name,
-        serialPortPath:
-          session.connectionMethod === 'serial_port'
-            ? session.device.serialPortPath ?? session.device.id
-            : undefined,
-        deviceId:
-          session.connectionMethod === 'android_usb_nfc'
-            ? session.device.deviceId ?? session.device.id
-            : undefined,
-      } as const;
+      const completionPayload = buildCompletionPayload(
+        session,
+        trimmedTagId,
+        payloadResult.data,
+      );
       const completionResult = await completeProgramming(
         session.programmingRecordId,
         completionPayload,
@@ -177,6 +186,56 @@ function RfidProgrammingModal({
           ? error.message
           : 'No se pudo completar la programacion RFID.',
       );
+    }
+  };
+
+  const handleConfirmManualProgramming = async () => {
+    const trimmedTagId = tagId.trim();
+
+    if (!trimmedTagId) {
+      setErrorMessage('Captura el tagId real de la etiqueta antes de confirmar.');
+      return;
+    }
+
+    if (!payloadData) {
+      setErrorMessage('Primero genera el payload RFID para continuar.');
+      return;
+    }
+
+    setErrorMessage(null);
+    setInfoMessage(null);
+
+    try {
+      setStage('completing');
+      const completionResult = await completeProgramming(
+        session.programmingRecordId,
+        buildCompletionPayload(session, trimmedTagId, payloadData),
+      );
+
+      setStage('success');
+      setInfoMessage(completionResult.message);
+      await onCompleted(completionResult);
+    } catch (error) {
+      setStage('error');
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'No se pudo confirmar la programacion RFID.',
+      );
+    }
+  };
+
+  const handleCopyPayload = async () => {
+    if (!payloadData?.payloadHex) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(payloadData.payloadHex);
+      setCopiedPayload(true);
+      setInfoMessage('Payload copiado. Pegalo como texto en NFC Tools.');
+    } catch {
+      setErrorMessage('No se pudo copiar el payload automaticamente. Copialo manualmente.');
     }
   };
 
@@ -233,30 +292,70 @@ function RfidProgrammingModal({
           <input
             type='text'
             value={tagId}
-            onChange={(event) => setTagId(event.target.value)}
-            placeholder='Lee o captura el tagId'
+            onChange={(event) => {
+              setTagId(event.target.value);
+              setPayloadData(null);
+              setWriteResult(null);
+              setCopiedPayload(false);
+
+              if (stage === 'awaiting_manual_write') {
+                setStage('idle');
+              }
+            }}
+            placeholder={
+              isAndroidManualAssisted
+                ? 'Captura el tagId desde NFC Tools o TagInfo'
+                : 'Lee o captura el tagId'
+            }
             disabled={isBusy}
             autoComplete='off'
           />
         </label>
 
+        {isAndroidManualAssisted && (
+          <div className='scanSummaryBlock scanResultBlock'>
+            <p>Modo Android manual asistido.</p>
+            <p>1. Lee la etiqueta en NFC Tools o TagInfo y captura aqui el tagId.</p>
+            <p>2. Genera el payload RFID.</p>
+            <p>3. En NFC Tools usa Escribir {'>'} Texto y pega el payload exacto.</p>
+            <p>4. Acerca la etiqueta al telefono y completa la escritura manualmente.</p>
+            <p>5. Regresa aqui y confirma la programacion.</p>
+          </div>
+        )}
+
         <div className='modalActionRow'>
-          <button
-            className='adminPrimaryButton adminSecondaryButton'
-            type='button'
-            onClick={() => void handleReadTagId()}
-            disabled={isBusy}
-          >
-            {stage === 'reading_tag' ? 'Leyendo...' : 'Leer tagId'}
-          </button>
+          {!isAndroidManualAssisted && (
+            <button
+              className='adminPrimaryButton adminSecondaryButton'
+              type='button'
+              onClick={() => void handleReadTagId()}
+              disabled={isBusy}
+            >
+              {stage === 'reading_tag' ? 'Leyendo...' : 'Leer tagId'}
+            </button>
+          )}
           <button
             className='adminPrimaryButton'
             type='button'
-            onClick={() => void handleProgramTag()}
+            onClick={() => void handleBuildPayload()}
             disabled={isBusy || !tagId.trim()}
           >
-            {isBusy ? 'Procesando...' : 'Programar etiqueta'}
+            {stage === 'building_payload'
+              ? 'Generando...'
+              : isAndroidManualAssisted
+                ? 'Generar payload'
+                : 'Programar etiqueta'}
           </button>
+          {isAndroidManualAssisted && (
+            <button
+              className='adminPrimaryButton adminSecondaryButton'
+              type='button'
+              onClick={() => void handleConfirmManualProgramming()}
+              disabled={isBusy || !payloadData}
+            >
+              {stage === 'completing' ? 'Confirmando...' : 'Confirmar programacion manual'}
+            </button>
+          )}
         </div>
 
         {payloadData && (
@@ -268,6 +367,18 @@ function RfidProgrammingModal({
             )}
             {payloadData.legacyPartMapping && (
               <p>{`Legacy mapping: ${payloadData.legacyPartMapping}`}</p>
+            )}
+            {isAndroidManualAssisted && (
+              <div className='modalActionRow rfidProgrammingActionRowCompact'>
+                <button
+                  className='adminPrimaryButton adminSecondaryButton'
+                  type='button'
+                  onClick={() => void handleCopyPayload()}
+                  disabled={isBusy}
+                >
+                  {copiedPayload ? 'Payload copiado' : 'Copiar payload'}
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -285,12 +396,33 @@ function RfidProgrammingModal({
         )}
 
         <p className='manualHint'>
-          Si cierras este modal antes de completar la programacion, el registro quedara capturado
-          y podras reanudar despues desde esta misma estacion.
+          {isAndroidManualAssisted
+            ? 'Si cierras este modal antes de confirmar la programacion manual, el registro quedara capturado y podras reanudar despues desde esta misma estacion.'
+            : 'Si cierras este modal antes de completar la programacion, el registro quedara capturado y podras reanudar despues desde esta misma estacion.'}
         </p>
       </div>
     </section>
   );
 }
+
+const buildCompletionPayload = (
+  session: RfidProgrammingSession,
+  tagId: string,
+  payloadData: BuildRfidPayloadData,
+) => ({
+  connectionMethod: session.connectionMethod,
+  tagId,
+  payloadHex: payloadData.payloadHex,
+  authCode: payloadData.authCode,
+  deviceName: session.device.name,
+  serialPortPath:
+    session.connectionMethod === 'serial_port'
+      ? session.device.serialPortPath ?? session.device.id
+      : undefined,
+  deviceId:
+    session.connectionMethod === 'android_usb_nfc'
+      ? session.device.deviceId ?? session.device.id
+      : undefined,
+} as const);
 
 export default RfidProgrammingModal;
