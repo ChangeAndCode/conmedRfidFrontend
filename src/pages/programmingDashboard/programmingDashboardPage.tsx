@@ -60,6 +60,21 @@ const PROGRAMMING_LIMIT_REACHED_MESSAGE =
 const getConnectionMethodLabel = (connectionMethod: ConnectionMethod) =>
   connectionMethod === 'serial_port' ? 'Lector por COM' : 'Android USB/NFC';
 
+const getHardwareDeviceStatusLabel = (
+  deviceStatus?: HardwareDeviceSummary['status'],
+) => {
+  switch (deviceStatus) {
+    case 'unauthorized':
+      return 'sin autorizar';
+    case 'offline':
+      return 'offline';
+    case 'connected':
+      return 'conectado';
+    default:
+      return null;
+  }
+};
+
 const formatGs1ManufactureDate = (value: string) => {
   if (!/^\d{6}$/.test(value)) {
     return value;
@@ -77,6 +92,8 @@ const formatGs1ManufactureDate = (value: string) => {
 
   return `${fullYear}-${month}-${day}`;
 };
+
+const normalizeManualManufactureDate = (value: string) => value.replace(/\D/g, '').slice(0, 8);
 
 const getServiceOrderProgrammedCount = (serviceOrder?: ServiceOrder | null) =>
   serviceOrder?.programmedCount ?? 0;
@@ -335,6 +352,14 @@ function ProgrammingDashboardPage() {
               connectionMethod,
             )}.`,
           });
+          return;
+        }
+
+        if (nextDevices.some((device) => device.status === 'unauthorized')) {
+          setHardwareMessage({
+            type: 'error',
+            text: 'ADB detecto un telefono Android, pero sigue sin autorizarse la depuracion USB.',
+          });
         }
       } catch (error) {
         if (isCancelled) {
@@ -466,6 +491,15 @@ function ProgrammingDashboardPage() {
           text: `No se detectaron dispositivos para ${getConnectionMethodLabel(
             connectionMethod,
           )}.`,
+        });
+        return;
+      }
+
+      if (nextDevices.some((device) => device.status === 'unauthorized')) {
+        setConnectedDevice(null);
+        setHardwareMessage({
+          type: 'error',
+          text: 'ADB detecto un telefono Android, pero sigue sin autorizarse la depuracion USB.',
         });
         return;
       }
@@ -1020,7 +1054,7 @@ function ProgrammingDashboardPage() {
     event.preventDefault();
 
     const trimmedLot = lot.trim();
-    const trimmedManufactureDate = manufactureDate.trim();
+    const trimmedManufactureDate = normalizeManualManufactureDate(manufactureDate.trim());
 
     if (!partNumber || !selectedManualServiceOrderId) {
       setManualMessage({
@@ -1540,6 +1574,9 @@ function ProgrammingDashboardPage() {
                     <option key={device.id} value={device.id}>
                       {device.name}
                       {device.isSimulated ? ' | simulado' : ''}
+                      {getHardwareDeviceStatusLabel(device.status)
+                        ? ` | ${getHardwareDeviceStatusLabel(device.status)}`
+                        : ''}
                     </option>
                   ))}
                 </select>

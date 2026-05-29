@@ -1,9 +1,56 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
+import { execFile } from 'node:child_process'
+import fs from 'node:fs'
 import path from 'node:path'
+import { promisify } from 'node:util'
 import { fileURLToPath } from 'node:url'
 
+const execFileAsync = promisify(execFile)
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+const repoRoot = path.resolve(__dirname, '..')
+
+const loadDotEnvFile = () => {
+  const envPath = path.join(repoRoot, '.env')
+
+  if (!fs.existsSync(envPath)) {
+    return
+  }
+
+  const rawContent = fs.readFileSync(envPath, 'utf8')
+
+  rawContent.split(/\r?\n/).forEach((line) => {
+    const trimmedLine = line.trim()
+
+    if (!trimmedLine || trimmedLine.startsWith('#')) {
+      return
+    }
+
+    const separatorIndex = trimmedLine.indexOf('=')
+
+    if (separatorIndex === -1) {
+      return
+    }
+
+    const key = trimmedLine.slice(0, separatorIndex).trim()
+    let value = trimmedLine.slice(separatorIndex + 1).trim()
+
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1)
+    }
+
+    if (!process.env[key]) {
+      process.env[key] = value
+    }
+  })
+}
+
+loadDotEnvFile()
+
+const isSimulationEnabled = process.env.CONMED_RFID_ENABLE_SIMULATION !== 'false'
 
 const buildSimulatedDevice = (connectionMethod, deviceId) => {
   if (connectionMethod === 'serial_port') {
@@ -13,7 +60,7 @@ const buildSimulatedDevice = (connectionMethod, deviceId) => {
       connectionMethod,
       status: 'connected',
       serialPortPath: deviceId,
-      description: 'Stub local hasta integrar el lector real.',
+      description: 'Fallback local mientras se integra el protocolo real.',
       isSimulated: true,
     }
   }
@@ -24,8 +71,340 @@ const buildSimulatedDevice = (connectionMethod, deviceId) => {
     connectionMethod,
     status: 'connected',
     deviceId,
-    description: 'Stub local hasta integrar el puente Android real.',
+    description: 'Fallback local mientras se integra el puente Android real.',
     isSimulated: true,
+  }
+}
+
+const getSimulatedDevices = (connectionMethod) =>
+  isSimulationEnabled
+    ? [
+        buildSimulatedDevice(
+          connectionMethod,
+          connectionMethod === 'serial_port' ? 'SIM-COM-1' : 'SIM-ANDROID-1',
+        ),
+      ]
+    : []
+
+const runPowerShell = async (command) => {
+  return execFileAsync(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command],
+    {
+      cwd: repoRoot,
+      windowsHide: true,
+      maxBuffer: 1024 * 1024,
+    },
+  )
+}
+
+const escapePowerShellLiteral = (value) =>
+  `'${String(value ?? '').replace(/'/g, "''")}'`
+
+const applyTemplateVariables = (template, replacements) => {
+  return template.replace(/\{\{(\w+)\}\}/g, (_match, token) =>
+    escapePowerShellLiteral(replacements[token] ?? ''),
+  )
+}
+
+const executeConfiguredHardwareCommand = async (template, replacements) => {
+  const command = applyTemplateVariables(template, replacements)
+  const { stdout } = await runPowerShell(command)
+  return stdout.trim()
+}
+
+const getConfiguredHardwareCommand = (connectionMethod, action) => {
+  if (connectionMethod === 'serial_port') {
+    return action === 'read'
+      ? process.env.CONMED_RFID_SERIAL_READ_TAG_COMMAND
+      : process.env.CONMED_RFID_SERIAL_WRITE_PAYLOAD_COMMAND
+  }
+
+  return action === 'read'
+    ? process.env.CONMED_RFID_ANDROID_READ_TAG_COMMAND
+    : process.env.CONMED_RFID_ANDROID_WRITE_PAYLOAD_COMMAND
+}
+
+const resolveAdbExecutable = async () => {
+  const configuredAdbPath =
+    process.env.CONMED_RFID_ADB_PATH ?? process.env.ADB_PATH
+
+  if (configuredAdbPath && fs.existsSync(configuredAdbPath)) {
+    return configuredAdbPath
+  }
+
+  try {
+    const { stdout } = await execFileAsync('where.exe', ['adb'], {
+      cwd: repoRoot,
+      windowsHide: true,
+    })
+    const resolvedPath = stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find(Boolean)
+
+    return resolvedPath || null
+  } catch {
+    return null
+  }
+}
+
+const listSerialPortDevices = async () => {
+  const discoveredPorts = new Map()
+
+  try {
+    const { stdout } = await runPowerShell(
+      "Get-ItemProperty HKLM:\\HARDWARE\\DEVICEMAP\\SERIALCOMM | ForEach-Object { $_.PSObject.Properties | Where-Object { $_.Name -notlike 'PS*' } | ForEach-Object { $_.Value } }",
+    )
+
+    stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => /^COM\d+$/i.test(line))
+      .forEach((portName) => {
+        discoveredPorts.set(portName.toUpperCase(), {
+          id: portName.toUpperCase(),
+          name: portName.toUpperCase(),
+          connectionMethod: 'serial_port',
+          status: 'available',
+          serialPortPath: portName.toUpperCase(),
+          description: 'Puerto serial detectado desde el registro de Windows.',
+          isSimulated: false,
+        })
+      })
+  } catch {
+    // Intenta el siguiente fallback.
+  }
+
+  if (discoveredPorts.size === 0) {
+    try {
+      const { stdout } = await execFileAsync('mode.com', [], {
+        cwd: repoRoot,
+        windowsHide: true,
+        maxBuffer: 1024 * 1024,
+      })
+
+      const matches = stdout.match(/COM\d+/gi) ?? []
+      matches.forEach((portName) => {
+        const normalizedPortName = portName.toUpperCase()
+
+        if (!discoveredPorts.has(normalizedPortName)) {
+          discoveredPorts.set(normalizedPortName, {
+            id: normalizedPortName,
+            name: normalizedPortName,
+            connectionMethod: 'serial_port',
+            status: 'available',
+            serialPortPath: normalizedPortName,
+            description: 'Puerto serial detectado con mode.com.',
+            isSimulated: false,
+          })
+        }
+      })
+    } catch {
+      // Si esto falla, se regresara simulacion si esta habilitada.
+    }
+  }
+
+  return Array.from(discoveredPorts.values())
+}
+
+const parseAdbDevices = (stdout) => {
+  return stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(
+      (line) =>
+        line &&
+        !line.startsWith('List of devices attached') &&
+        !line.startsWith('*'),
+    )
+    .map((line) => {
+      const [deviceId, state, ...rest] = line.split(/\s+/)
+      const modelToken = rest.find((token) => token.startsWith('model:'))
+      const productToken = rest.find((token) => token.startsWith('product:'))
+      const deviceToken = rest.find((token) => token.startsWith('device:'))
+      const normalizedState = (state || '').toLowerCase()
+      const connectionStatus =
+        normalizedState === 'device'
+          ? 'available'
+          : normalizedState === 'unauthorized'
+            ? 'unauthorized'
+            : normalizedState === 'offline'
+              ? 'offline'
+              : 'connected'
+
+      return {
+        id: deviceId,
+        name:
+          modelToken?.slice('model:'.length) ||
+          deviceToken?.slice('device:'.length) ||
+          productToken?.slice('product:'.length) ||
+          deviceId,
+        connectionMethod: 'android_usb_nfc',
+        status: connectionStatus,
+        deviceId,
+        description: line,
+        isSimulated: false,
+      }
+    })
+}
+
+const listAndroidDevices = async () => {
+  const adbExecutable = await resolveAdbExecutable()
+
+  if (!adbExecutable) {
+    return []
+  }
+
+  try {
+    const { stdout } = await execFileAsync(adbExecutable, ['devices', '-l'], {
+      cwd: repoRoot,
+      windowsHide: true,
+      maxBuffer: 1024 * 1024,
+    })
+
+    return parseAdbDevices(stdout)
+  } catch {
+    return []
+  }
+}
+
+const listHardwareDevices = async (connectionMethod) => {
+  const realDevices =
+    connectionMethod === 'serial_port'
+      ? await listSerialPortDevices()
+      : await listAndroidDevices()
+
+  if (realDevices.length > 0) {
+    return realDevices
+  }
+
+  return getSimulatedDevices(connectionMethod)
+}
+
+const resolveDeviceForConnection = async (connectionMethod, deviceId) => {
+  const devices = await listHardwareDevices(connectionMethod)
+  const resolvedDevice = devices.find((device) => device.id === deviceId)
+
+  if (resolvedDevice) {
+    if (resolvedDevice.status === 'unauthorized') {
+      throw new Error(
+        'El telefono esta detectado por ADB pero falta autorizar la depuracion USB en Android.',
+      )
+    }
+
+    if (resolvedDevice.status === 'offline') {
+      throw new Error(
+        'El telefono aparece offline en ADB. Desconectalo, reconectalo y verifica la depuracion USB.',
+      )
+    }
+
+    return {
+      ...resolvedDevice,
+      status: 'connected',
+    }
+  }
+
+  if (isSimulationEnabled) {
+    return buildSimulatedDevice(connectionMethod, deviceId)
+  }
+
+  throw new Error('El dispositivo solicitado ya no esta disponible.')
+}
+
+const performReadTagId = async (connectionMethod, deviceId) => {
+  const resolvedDevice = await resolveDeviceForConnection(connectionMethod, deviceId)
+  const configuredCommand = getConfiguredHardwareCommand(connectionMethod, 'read')
+
+  if (!configuredCommand) {
+    if (!isSimulationEnabled) {
+      throw new Error(
+        connectionMethod === 'android_usb_nfc'
+          ? 'El telefono fue detectado, pero falta configurar CONMED_RFID_ANDROID_READ_TAG_COMMAND para leer el tag real.'
+          : 'El lector fue detectado, pero falta configurar CONMED_RFID_SERIAL_READ_TAG_COMMAND para leer el tag real.',
+      )
+    }
+
+    const tagSuffix = Date.now().toString(16).toUpperCase().slice(-8).padStart(8, '0')
+
+    return {
+      tagId: `SIMTAG${tagSuffix}`,
+      device: {
+        ...resolvedDevice,
+        isSimulated: true,
+      },
+      simulated: true,
+    }
+  }
+
+  const stdout = await executeConfiguredHardwareCommand(configuredCommand, {
+    connectionMethod,
+    deviceId,
+    serialPortPath: resolvedDevice.serialPortPath ?? deviceId,
+    androidDeviceId: resolvedDevice.deviceId ?? deviceId,
+  })
+
+  if (!stdout) {
+    throw new Error('El comando de lectura RFID no devolvio un tagId.')
+  }
+
+  const [tagIdLine] = stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+
+  if (!tagIdLine) {
+    throw new Error('No se pudo interpretar el tagId devuelto por el hardware.')
+  }
+
+  return {
+    tagId: tagIdLine,
+    device: resolvedDevice,
+    simulated: false,
+  }
+}
+
+const performWritePayload = async (request) => {
+  const resolvedDevice = await resolveDeviceForConnection(
+    request.connectionMethod,
+    request.deviceId,
+  )
+  const configuredCommand = getConfiguredHardwareCommand(
+    request.connectionMethod,
+    'write',
+  )
+
+  if (!configuredCommand) {
+    if (!isSimulationEnabled) {
+      throw new Error(
+        request.connectionMethod === 'android_usb_nfc'
+          ? 'El telefono fue detectado, pero falta configurar CONMED_RFID_ANDROID_WRITE_PAYLOAD_COMMAND para escribir el payload real.'
+          : 'El lector fue detectado, pero falta configurar CONMED_RFID_SERIAL_WRITE_PAYLOAD_COMMAND para escribir el payload real.',
+      )
+    }
+
+    return {
+      success: true,
+      message: `Escritura simulada completada para ${request.tagId}.`,
+      simulated: true,
+      device: {
+        ...resolvedDevice,
+        isSimulated: true,
+      },
+    }
+  }
+
+  const stdout = await executeConfiguredHardwareCommand(configuredCommand, {
+    connectionMethod: request.connectionMethod,
+    deviceId: request.deviceId,
+    serialPortPath: resolvedDevice.serialPortPath ?? request.deviceId,
+    androidDeviceId: resolvedDevice.deviceId ?? request.deviceId,
+    tagId: request.tagId,
+    payloadHex: request.payloadHex,
+  })
+
+  return {
+    success: true,
+    message: stdout || `Payload escrito correctamente en ${request.tagId}.`,
+    simulated: false,
+    device: resolvedDevice,
   }
 }
 
@@ -36,7 +415,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
     },
   })
 
@@ -44,42 +423,26 @@ function createWindow() {
 }
 
 function registerRfidIpcHandlers() {
-  ipcMain.handle('conmed-rfid:list-devices', (_event, connectionMethod) => {
-    return [
-      buildSimulatedDevice(
-        connectionMethod,
-        connectionMethod === 'serial_port' ? 'SIM-COM-1' : 'SIM-ANDROID-1',
-      ),
-    ]
+  ipcMain.handle('conmed-rfid:list-devices', async (_event, connectionMethod) => {
+    return listHardwareDevices(connectionMethod)
   })
 
   ipcMain.handle(
     'conmed-rfid:connect-device',
-    (_event, { connectionMethod, deviceId }) => {
-      return buildSimulatedDevice(connectionMethod, deviceId)
+    async (_event, { connectionMethod, deviceId }) => {
+      return resolveDeviceForConnection(connectionMethod, deviceId)
     },
   )
 
   ipcMain.handle(
     'conmed-rfid:read-tag-id',
-    (_event, { connectionMethod, deviceId }) => {
-      const tagSuffix = Date.now().toString(16).toUpperCase().slice(-8).padStart(8, '0')
-
-      return {
-        tagId: `SIMTAG${tagSuffix}`,
-        device: buildSimulatedDevice(connectionMethod, deviceId),
-        simulated: true,
-      }
+    async (_event, { connectionMethod, deviceId }) => {
+      return performReadTagId(connectionMethod, deviceId)
     },
   )
 
-  ipcMain.handle('conmed-rfid:write-payload', (_event, request) => {
-    return {
-      success: true,
-      message: `Escritura simulada completada para ${request.tagId}.`,
-      simulated: true,
-      device: buildSimulatedDevice(request.connectionMethod, request.deviceId),
-    }
+  ipcMain.handle('conmed-rfid:write-payload', async (_event, request) => {
+    return performWritePayload(request)
   })
 }
 

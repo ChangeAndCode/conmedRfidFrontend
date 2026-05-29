@@ -10,7 +10,7 @@ export interface HardwareDeviceSummary {
   id: string;
   name: string;
   connectionMethod: ConnectionMethod;
-  status?: 'available' | 'connected';
+  status?: 'available' | 'connected' | 'unauthorized' | 'offline';
   description?: string;
   serialPortPath?: string;
   deviceId?: string;
