@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   readHardwareTagId,
   writeHardwarePayload,
@@ -25,6 +25,7 @@ type ProgrammingStage =
   | 'reading_tag'
   | 'building_payload'
   | 'awaiting_manual_write'
+  | 'awaiting_serial_write'
   | 'writing_tag'
   | 'completing'
   | 'success'
@@ -45,11 +46,13 @@ const getStageLabel = (
     case 'reading_tag':
       return isAndroidManualAssisted
         ? 'Leyendo tagId desde el hardware...'
-        : 'Acerca la etiqueta al lector para leer automaticamente el tagId.';
+        : 'Acerca la etiqueta al lector para leer el tagId.';
     case 'building_payload':
       return 'Construyendo payload RFID con el backend...';
     case 'awaiting_manual_write':
       return 'Payload generado. Escribelo manualmente en NFC Tools y luego confirma la programacion.';
+    case 'awaiting_serial_write':
+      return 'Payload generado. Vuelve a pasar la etiqueta para escribirlo por COM.';
     case 'writing_tag':
       return 'Escribiendo payload en la etiqueta...';
     case 'completing':
@@ -61,7 +64,7 @@ const getStageLabel = (
     default:
       return isAndroidManualAssisted
         ? 'Listo para programar la etiqueta RFID.'
-        : 'Listo para iniciar la programacion automatica por COM.';
+        : 'Listo para leer el tagId por COM.';
   }
 };
 
@@ -77,10 +80,8 @@ function RfidProgrammingModal({
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copiedPayload, setCopiedPayload] = useState(false);
-  const serialAutoStartedRef = useRef(false);
 
   const isAndroidManualAssisted = session.connectionMethod === 'android_usb_nfc';
-  const isSerialAutomaticFlow = session.connectionMethod === 'serial_port';
 
   const isBusy =
     stage === 'reading_tag' ||
@@ -102,15 +103,16 @@ function RfidProgrammingModal({
     return payloadResult;
   }, [session.programmingRecordId]);
 
-  const runAutomaticProgramming = useCallback(async (tagIdToUse: string) => {
-    const payloadResult = await buildPayloadForTagId(tagIdToUse);
-
+  const writePayloadAndCompleteProgramming = useCallback(async (
+    tagIdToUse: string,
+    payloadDataToUse: BuildRfidPayloadData,
+  ) => {
     setStage('writing_tag');
     const nextWriteResult = await writeHardwarePayload({
       connectionMethod: session.connectionMethod,
       deviceId: session.device.id,
       tagId: tagIdToUse,
-      payloadHex: payloadResult.data.payloadHex,
+      payloadHex: payloadDataToUse.payloadHex,
     });
 
     if (!nextWriteResult.success) {
@@ -126,18 +128,21 @@ function RfidProgrammingModal({
     setStage('completing');
     const completionResult = await completeProgramming(
       session.programmingRecordId,
-      buildCompletionPayload(session, tagIdToUse, payloadResult.data),
+      buildCompletionPayload(session, tagIdToUse, payloadDataToUse),
     );
 
     setStage('success');
     setInfoMessage(completionResult.message);
     await onCompleted(completionResult);
-  }, [buildPayloadForTagId, onCompleted, session]);
+  }, [onCompleted, session]);
 
-  const handleAutomaticSerialProgramming = useCallback(async () => {
+  const handleSerialTagRead = useCallback(async () => {
     setErrorMessage(null);
-    setInfoMessage('Acerca la etiqueta RFID al lector para iniciar la programacion.');
+    setInfoMessage('Acerca la etiqueta RFID al lector para leer el tagId.');
+    setTagId('');
+    setPayloadData(null);
     setWriteResult(null);
+    setCopiedPayload(false);
 
     try {
       setStage('reading_tag');
@@ -148,16 +153,20 @@ function RfidProgrammingModal({
 
       setTagId(readResult.tagId);
 
-      await runAutomaticProgramming(readResult.tagId);
+      const payloadResult = await buildPayloadForTagId(readResult.tagId);
+      setStage('awaiting_serial_write');
+      setInfoMessage(
+        `${payloadResult.message} Vuelve a pasar la etiqueta RFID para escribir el payload.`,
+      );
     } catch (error) {
       setStage('error');
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'No se pudo completar la programacion automatica por COM.',
+          : 'No se pudo leer el tagId de la etiqueta por COM.',
       );
     }
-  }, [runAutomaticProgramming, session.connectionMethod, session.device.id]);
+  }, [buildPayloadForTagId, session.connectionMethod, session.device.id]);
 
   const handleBuildPayload = async () => {
     const trimmedTagId = tagId.trim();
@@ -171,16 +180,11 @@ function RfidProgrammingModal({
     setInfoMessage(null);
 
     try {
-      if (isAndroidManualAssisted) {
-        const payloadResult = await buildPayloadForTagId(trimmedTagId);
-        setStage('awaiting_manual_write');
-        setInfoMessage(
-          `${payloadResult.message} Copialo en NFC Tools > Escribir > Texto y luego confirma aqui.`,
-        );
-        return;
-      }
-
-      await runAutomaticProgramming(trimmedTagId);
+      const payloadResult = await buildPayloadForTagId(trimmedTagId);
+      setStage('awaiting_manual_write');
+      setInfoMessage(
+        `${payloadResult.message} Copialo en NFC Tools > Escribir > Texto y luego confirma aqui.`,
+      );
     } catch (error) {
       setStage('error');
       setErrorMessage(
@@ -191,20 +195,33 @@ function RfidProgrammingModal({
     }
   };
 
-  useEffect(() => {
-    if (!isSerialAutomaticFlow || serialAutoStartedRef.current) {
+  const handleSerialWriteProgramming = async () => {
+    const trimmedTagId = tagId.trim();
+
+    if (!trimmedTagId) {
+      setErrorMessage('Primero lee el tagId de la etiqueta RFID.');
       return;
     }
 
-    serialAutoStartedRef.current = true;
-    const timeoutId = window.setTimeout(() => {
-      void handleAutomaticSerialProgramming();
-    }, 0);
+    if (!payloadData) {
+      setErrorMessage('Primero genera el payload RFID para continuar.');
+      return;
+    }
 
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [handleAutomaticSerialProgramming, isSerialAutomaticFlow, session.programmingRecordId]);
+    setErrorMessage(null);
+    setInfoMessage('Vuelve a pasar la etiqueta RFID al lector para escribir el payload.');
+
+    try {
+      await writePayloadAndCompleteProgramming(trimmedTagId, payloadData);
+    } catch (error) {
+      setStage('error');
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'No se pudo escribir el payload RFID por COM.',
+      );
+    }
+  };
 
   const handleConfirmManualProgramming = async () => {
     const trimmedTagId = tagId.trim();
@@ -327,10 +344,12 @@ function RfidProgrammingModal({
           </label>
         ) : (
           <div className='scanSummaryBlock scanResultBlock'>
-            <p>Modo COM automatico.</p>
-            <p>Acerca la etiqueta RFID al lector conectado.</p>
-            <p>El sistema intentara leer el tagId, generar el payload y programar la etiqueta automaticamente.</p>
+            <p>Modo COM en dos pasos.</p>
+            <p>1. Lee la etiqueta RFID para capturar el tagId.</p>
+            <p>2. El sistema generara el payload RFID con el backend.</p>
+            <p>3. Vuelve a pasar la misma etiqueta para escribir el payload.</p>
             {tagId && <p>{`tagId detectado: ${tagId}`}</p>}
+            {payloadData && <p>Payload listo para escritura por COM.</p>}
           </div>
         )}
 
@@ -356,14 +375,32 @@ function RfidProgrammingModal({
               {stage === 'building_payload' ? 'Generando...' : 'Generar payload'}
             </button>
           ) : (
-            <button
-              className='adminPrimaryButton adminSecondaryButton'
-              type='button'
-              onClick={() => void handleAutomaticSerialProgramming()}
-              disabled={isBusy}
-            >
-              {isBusy ? 'Procesando...' : 'Reintentar programacion automatica'}
-            </button>
+            <>
+              <button
+                className='adminPrimaryButton adminSecondaryButton'
+                type='button'
+                onClick={() => void handleSerialTagRead()}
+                disabled={isBusy}
+              >
+                {stage === 'reading_tag'
+                  ? 'Leyendo tagId...'
+                  : stage === 'building_payload'
+                    ? 'Generando payload...'
+                    : payloadData
+                      ? 'Leer otro tagId'
+                      : 'Leer tagId'}
+              </button>
+              <button
+                className='adminPrimaryButton'
+                type='button'
+                onClick={() => void handleSerialWriteProgramming()}
+                disabled={isBusy || !payloadData}
+              >
+                {stage === 'writing_tag' || stage === 'completing'
+                  ? 'Escribiendo...'
+                  : 'Escribir payload'}
+              </button>
+            </>
           )}
           {isAndroidManualAssisted && (
             <button
