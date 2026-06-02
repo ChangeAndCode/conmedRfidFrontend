@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppSceneLayout from '../../components/appSceneLayout';
-import VerificationReportCreateModal from '../../components/verificationReportCreateModal';
 import VerificationReportPrintModal from '../../components/verificationReportPrintModal';
 import { useAuth } from '../../context/useAuth';
 import '../../css/verificationDashboard.css';
@@ -40,7 +39,6 @@ import type {
 } from '../../types/RfidProgramming';
 import type { ServiceOrder } from '../../types/ServiceOrder';
 import type {
-  CreateVerificationReportPayload,
   VerificationReport,
 } from '../../types/VerificationReport';
 
@@ -266,8 +264,8 @@ function ValidationDashboardPage() {
   const [relatedServiceOrderError, setRelatedServiceOrderError] = useState<string | null>(null);
   const [printInterruptions, setPrintInterruptions] = useState<PrintInterruption[]>([]);
   const [isLoadingPrintInterruptions, setIsLoadingPrintInterruptions] = useState(false);
-  const [creatingVerificationReportFor, setCreatingVerificationReportFor] =
-    useState<ServiceOrder | null>(null);
+  const [creatingVerificationReportForId, setCreatingVerificationReportForId] =
+    useState<string | null>(null);
   const [activeVerificationReportPrintFlow, setActiveVerificationReportPrintFlow] =
     useState<VerificationReport | null>(null);
   const [isLoadingVerificationOrders, setIsLoadingVerificationOrders] = useState(false);
@@ -443,21 +441,42 @@ function ValidationDashboardPage() {
   }, [token]);
 
   const maybeOpenVerificationReportModal = useCallback(
-    (
+    async (
       serviceOrder?: ServiceOrder | null,
       verificationReport?: VerifyProgrammingRecordResponse['data']['verificationReport'],
     ) => {
       if (
         !serviceOrder ||
-        creatingVerificationReportFor?._id === serviceOrder._id ||
+        creatingVerificationReportForId === serviceOrder._id ||
         !shouldOpenVerificationReportModal(serviceOrder, verificationReport)
       ) {
         return;
       }
 
-      setCreatingVerificationReportFor(serviceOrder);
+      setCreatingVerificationReportForId(serviceOrder._id);
+
+      try {
+        const result = await createVerificationReport({
+          serviceOrderId: serviceOrder._id,
+        });
+        setActiveVerificationReportPrintFlow(result.data);
+        setMessage({
+          type: 'success',
+          text: result.message,
+        });
+      } catch (error) {
+        setMessage({
+          type: 'error',
+          text:
+            error instanceof Error
+              ? error.message
+              : 'No se pudo generar el reporte de verificacion.',
+        });
+      } finally {
+        setCreatingVerificationReportForId(null);
+      }
     },
-    [creatingVerificationReportFor?._id],
+    [creatingVerificationReportForId],
   );
 
   const resetFormForMode = (nextMode: ProgrammingRecordMode) => {
@@ -1027,7 +1046,7 @@ function ValidationDashboardPage() {
           selectedVerificationServiceOrderId,
       );
 
-      maybeOpenVerificationReportModal(
+      await maybeOpenVerificationReportModal(
         refreshedServiceOrder,
         result.data.verificationReport,
       );
@@ -1052,18 +1071,6 @@ function ValidationDashboardPage() {
       verifiedBy:
         currentValues.verifiedBy.trim() || buildDefaultVerifier(user?.username),
     }));
-  };
-
-  const handleCreateVerificationReport = async (
-    payload: CreateVerificationReportPayload,
-  ) => {
-    const result = await createVerificationReport(payload);
-    setCreatingVerificationReportFor(null);
-    setActiveVerificationReportPrintFlow(result.data);
-    setMessage({
-      type: 'success',
-      text: result.message,
-    });
   };
 
   const selectedProgrammingSource = selectedProgrammingRecord
@@ -1784,18 +1791,11 @@ function ValidationDashboardPage() {
         </div>
       </section>
 
-      {creatingVerificationReportFor && (
-        <VerificationReportCreateModal
-          serviceOrder={creatingVerificationReportFor}
-          onClose={() => setCreatingVerificationReportFor(null)}
-          onSubmit={handleCreateVerificationReport}
-        />
-      )}
-
       {activeVerificationReportPrintFlow && (
         <VerificationReportPrintModal
           report={activeVerificationReportPrintFlow}
           mode='print'
+          autoStart={false}
           isLoadingPrintInterruptions={isLoadingPrintInterruptions}
           printInterruptions={printInterruptions}
           onClose={() => setActiveVerificationReportPrintFlow(null)}
