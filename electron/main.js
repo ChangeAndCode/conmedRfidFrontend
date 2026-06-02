@@ -753,6 +753,11 @@ function createWindow() {
     },
   })
 
+  if (app.isPackaged) {
+    win.loadFile(path.join(repoRoot, 'dist', 'index.html'))
+    return
+  }
+
   win.loadURL('http://localhost:5173')
 }
 
