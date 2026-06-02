@@ -23,6 +23,20 @@ export async function listPrintInterruptions(): Promise<PrintInterruption[]> {
   return result?.data ?? [];
 }
 
+export async function listPublicPrintInterruptions(): Promise<PrintInterruption[]> {
+  const response = await fetch(`${API_URL}/api/public/print-interruptions`);
+
+  const result = (await response.json().catch(() => null)) as
+    | { count?: number; data?: PrintInterruption[]; message?: string }
+    | null;
+
+  if (!response.ok) {
+    throw new Error(result?.message ?? 'No se pudieron cargar las interrupciones de impresion.');
+  }
+
+  return result?.data ?? [];
+}
+
 export async function createPrintInterruption(
   payload: PrintInterruptionMutationPayload,
 ): Promise<PrintInterruptionMutationResponse> {

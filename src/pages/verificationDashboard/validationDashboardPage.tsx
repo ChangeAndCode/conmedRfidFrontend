@@ -4,7 +4,7 @@ import AppSceneLayout from '../../components/appSceneLayout';
 import VerificationReportPrintModal from '../../components/verificationReportPrintModal';
 import { useAuth } from '../../context/useAuth';
 import '../../css/verificationDashboard.css';
-import { listPrintInterruptions } from '../../services/printInterruptionService';
+import { listPublicPrintInterruptions } from '../../services/printInterruptionService';
 import {
   resolveVerificationProgrammingRecord,
   verifyProgrammingRecord,
@@ -20,8 +20,8 @@ import {
 } from '../../services/serviceOrderService';
 import {
   createVerificationReport,
-  markVerificationReportAsPrinted,
-  markVerificationReportPrintInterrupted,
+  markPublicVerificationReportAsPrinted,
+  markPublicVerificationReportPrintInterrupted,
 } from '../../services/verificationReportService';
 import type { PrintInterruption } from '../../types/PrintInterruption';
 import type {
@@ -415,16 +415,10 @@ function ValidationDashboardPage() {
   );
 
   const loadPrintInterruptions = useCallback(async () => {
-    if (!token) {
-      setPrintInterruptions([]);
-      setIsLoadingPrintInterruptions(false);
-      return;
-    }
-
     setIsLoadingPrintInterruptions(true);
 
     try {
-      const nextPrintInterruptions = await listPrintInterruptions();
+      const nextPrintInterruptions = await listPublicPrintInterruptions();
       setPrintInterruptions(nextPrintInterruptions);
     } catch (error) {
       setPrintInterruptions([]);
@@ -438,7 +432,7 @@ function ValidationDashboardPage() {
     } finally {
       setIsLoadingPrintInterruptions(false);
     }
-  }, [token]);
+  }, []);
 
   const maybeOpenVerificationReportModal = useCallback(
     async (
@@ -1800,22 +1794,28 @@ function ValidationDashboardPage() {
           printInterruptions={printInterruptions}
           onClose={() => setActiveVerificationReportPrintFlow(null)}
           onMarkPrinted={async (payload) => {
-            const result = await markVerificationReportAsPrinted(
+            const result = await markPublicVerificationReportAsPrinted(
               activeVerificationReportPrintFlow._id,
               payload,
             );
             setActiveVerificationReportPrintFlow(result.data);
+            await loadVerificationServiceOrders(
+              activeVerificationReportPrintFlow.serviceOrderId,
+            );
             setMessage({
               type: 'success',
               text: result.message,
             });
           }}
           onMarkPrintInterrupted={async (payload) => {
-            const result = await markVerificationReportPrintInterrupted(
+            const result = await markPublicVerificationReportPrintInterrupted(
               activeVerificationReportPrintFlow._id,
               payload,
             );
             setActiveVerificationReportPrintFlow(result.data);
+            await loadVerificationServiceOrders(
+              activeVerificationReportPrintFlow.serviceOrderId,
+            );
             setMessage({
               type: 'success',
               text: result.message,
