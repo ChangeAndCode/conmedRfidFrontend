@@ -9,42 +9,69 @@ const execFileAsync = promisify(execFile)
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const repoRoot = path.resolve(__dirname, '..')
+const executableDirectory = path.dirname(process.execPath)
+const packagedResourceDirectory = process.resourcesPath
+const packagedPlatformToolsDirectory = path.join(
+  packagedResourceDirectory,
+  'platform-tools',
+)
+const developmentPlatformToolsDirectory = path.resolve(
+  repoRoot,
+  '..',
+  'platform-tools',
+)
 
-const loadDotEnvFile = () => {
-  const envPath = path.join(repoRoot, '.env')
+const getChildProcessWorkingDirectory = () =>
+  app.isPackaged ? executableDirectory : repoRoot
 
-  if (!fs.existsSync(envPath)) {
-    return
+const getDotEnvSearchPaths = () => {
+  const envPaths = []
+
+  if (app.isPackaged) {
+    envPaths.push(path.join(executableDirectory, '.env'))
+    envPaths.push(path.join(packagedResourceDirectory, '.env'))
   }
 
-  const rawContent = fs.readFileSync(envPath, 'utf8')
+  envPaths.push(path.join(repoRoot, '.env'))
 
-  rawContent.split(/\r?\n/).forEach((line) => {
-    const trimmedLine = line.trim()
+  return Array.from(new Set(envPaths))
+}
 
-    if (!trimmedLine || trimmedLine.startsWith('#')) {
+const loadDotEnvFile = () => {
+  getDotEnvSearchPaths().forEach((envPath) => {
+    if (!fs.existsSync(envPath)) {
       return
     }
 
-    const separatorIndex = trimmedLine.indexOf('=')
+    const rawContent = fs.readFileSync(envPath, 'utf8')
 
-    if (separatorIndex === -1) {
-      return
-    }
+    rawContent.split(/\r?\n/).forEach((line) => {
+      const trimmedLine = line.trim()
 
-    const key = trimmedLine.slice(0, separatorIndex).trim()
-    let value = trimmedLine.slice(separatorIndex + 1).trim()
+      if (!trimmedLine || trimmedLine.startsWith('#')) {
+        return
+      }
 
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1)
-    }
+      const separatorIndex = trimmedLine.indexOf('=')
 
-    if (!process.env[key]) {
-      process.env[key] = value
-    }
+      if (separatorIndex === -1) {
+        return
+      }
+
+      const key = trimmedLine.slice(0, separatorIndex).trim()
+      let value = trimmedLine.slice(separatorIndex + 1).trim()
+
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1)
+      }
+
+      if (!process.env[key]) {
+        process.env[key] = value
+      }
+    })
   })
 }
 
@@ -91,7 +118,7 @@ const runPowerShell = async (command) => {
     'powershell.exe',
     ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command],
     {
-      cwd: repoRoot,
+      cwd: getChildProcessWorkingDirectory(),
       windowsHide: true,
       maxBuffer: 1024 * 1024,
     },
@@ -336,13 +363,41 @@ const resolveAdbExecutable = async () => {
   const configuredAdbPath =
     process.env.CONMED_RFID_ADB_PATH ?? process.env.ADB_PATH
 
-  if (configuredAdbPath && fs.existsSync(configuredAdbPath)) {
-    return configuredAdbPath
+  if (configuredAdbPath) {
+    const configuredPathCandidates = path.isAbsolute(configuredAdbPath)
+      ? [configuredAdbPath]
+      : [
+          path.resolve(getChildProcessWorkingDirectory(), configuredAdbPath),
+          path.resolve(repoRoot, configuredAdbPath),
+        ]
+
+    const resolvedConfiguredAdbPath = configuredPathCandidates.find((candidate) =>
+      fs.existsSync(candidate),
+    )
+
+    if (resolvedConfiguredAdbPath) {
+      return resolvedConfiguredAdbPath
+    }
+  }
+
+  const portableAdbPathCandidates = [
+    path.join(packagedPlatformToolsDirectory, 'adb.exe'),
+    path.join(executableDirectory, 'platform-tools', 'adb.exe'),
+    path.join(executableDirectory, 'adb.exe'),
+    path.join(developmentPlatformToolsDirectory, 'adb.exe'),
+  ]
+
+  const discoveredPortableAdbPath = portableAdbPathCandidates.find((candidate) =>
+    fs.existsSync(candidate),
+  )
+
+  if (discoveredPortableAdbPath) {
+    return discoveredPortableAdbPath
   }
 
   try {
     const { stdout } = await execFileAsync('where.exe', ['adb'], {
-      cwd: repoRoot,
+      cwd: getChildProcessWorkingDirectory(),
       windowsHide: true,
     })
     const resolvedPath = stdout
@@ -431,7 +486,7 @@ const listSerialPortDevices = async () => {
   if (discoveredPorts.size === 0) {
     try {
       const { stdout } = await execFileAsync('mode.com', [], {
-        cwd: repoRoot,
+        cwd: getChildProcessWorkingDirectory(),
         windowsHide: true,
         maxBuffer: 1024 * 1024,
       })
@@ -531,7 +586,7 @@ const listAndroidDevices = async () => {
 
   try {
     const { stdout } = await execFileAsync(adbExecutable, ['devices', '-l'], {
-      cwd: repoRoot,
+      cwd: getChildProcessWorkingDirectory(),
       windowsHide: true,
       maxBuffer: 1024 * 1024,
     })

@@ -49,6 +49,15 @@
       "package.json",
       ".env"
     ],
+    "extraResources": [
+      {
+        "from": "../platform-tools",
+        "to": "platform-tools",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
     "win": {
       "target": [
         {
