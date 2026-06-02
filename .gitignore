@@ -15,7 +15,6 @@ dist-ssr
 .env.*
 !.env.example
 release/
-release-portable/
 
 # Editor directories and files
 .vscode/*
