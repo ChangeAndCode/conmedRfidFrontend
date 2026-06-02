@@ -5,6 +5,7 @@ import AppSceneLayout from '../../components/appSceneLayout';
 import ConfirmActionModal from '../../components/confirmActionModal';
 import GtinFormModal from '../../components/gtinFormModal';
 import PartConfigFormModal from '../../components/partConfigFormModal';
+import ResponsibleFormModal from '../../components/responsibleFormModal';
 import ProgrammingRecordsQuickReference from '../../components/programmingRecordsQuickReference';
 import RegisterModal from '../../components/registerModal';
 import RfidProgramFormModal from '../../components/rfidProgramFormModal';
@@ -91,6 +92,14 @@ import {
   updateUserStatus,
 } from '../../services/userService';
 import type { User } from '../../types/Auth';
+import type { Responsible, ResponsibleArea } from "../../types/Responsible";
+import {
+  createResponsible,
+  deleteResponsible,
+  getResponsibles,
+  toggleResponsibleStatus,
+  updateResponsible,
+} from "../../services/responsibleService";
 
 type DashboardMessage = {
   type: 'info' | 'error' | 'success';
@@ -116,6 +125,11 @@ type PendingUserAction =
   | { type: 'activate'; user: User }
   | { type: 'deactivate'; user: User }
   | { type: 'delete'; user: User };
+
+type PendingResponsibleAction =
+  | { type: 'activate'; responsible: Responsible }
+  | { type: 'deactivate'; responsible: Responsible }
+  | { type: 'delete'; responsible: Responsible };
 
 type PendingVerificationReportAction = {
   report: VerificationReport;
@@ -334,6 +348,8 @@ function AdministrationDashboardPage() {
   const [rfidPrograms, setRfidPrograms] = useState<RfidProgram[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [responsibles, setResponsibles] = useState<Responsible[]>([]);
+  const [isLoadingResponsibles, setIsLoadingResponsibles] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingGtins, setIsLoadingGtins] = useState(true);
   const [isLoadingRfidPrograms, setIsLoadingRfidPrograms] = useState(true);
@@ -341,10 +357,12 @@ function AdministrationDashboardPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreateGtinModalOpen, setIsCreateGtinModalOpen] = useState(false);
   const [isCreateRfidProgramModalOpen, setIsCreateRfidProgramModalOpen] = useState(false);
+  const [isCreateResponsibleModalOpen, setIsCreateResponsibleModalOpen] = useState(false);
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [editingPartConfig, setEditingPartConfig] = useState<PartConfig | null>(null);
   const [editingGtin, setEditingGtin] = useState<Gtin | null>(null);
   const [editingRfidProgram, setEditingRfidProgram] = useState<RfidProgram | null>(null);
+  const [editingResponsible, setEditingResponsible] = useState<Responsible | null>(null);
   const [copyingPartConfig, setCopyingPartConfig] = useState<PartConfig | null>(null);
   const [serviceOrders, setServiceOrders] = useState<ServiceOrder[]>([]);
   const [changeRequests, setChangeRequests] = useState<ServiceOrderChangeRequest[]>([]);
@@ -385,11 +403,15 @@ function AdministrationDashboardPage() {
   const [pendingRfidProgramAction, setPendingRfidProgramAction] =
     useState<PendingRfidProgramAction | null>(null);
   const [pendingUserAction, setPendingUserAction] = useState<PendingUserAction | null>(null);
+  const [pendingResponsibleAction, setPendingResponsibleAction] =
+    useState<PendingResponsibleAction | null>(null);
   const [newPrintInterruptionTitle, setNewPrintInterruptionTitle] = useState('');
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
   const [isSubmittingGtinAction, setIsSubmittingGtinAction] = useState(false);
   const [isSubmittingRfidProgramAction, setIsSubmittingRfidProgramAction] = useState(false);
   const [isSubmittingUserAction, setIsSubmittingUserAction] = useState(false);
+  const [isSubmittingResponsibleAction, setIsSubmittingResponsibleAction] =
+  useState(false);
   const [isSubmittingReportResponsibles, setIsSubmittingReportResponsibles] = useState(false);
   const [isSubmittingPrintInterruptionCreate, setIsSubmittingPrintInterruptionCreate] =
     useState(false);
@@ -588,6 +610,39 @@ function AdministrationDashboardPage() {
       return false;
     } finally {
       setIsLoadingUsers(false);
+    }
+  };
+
+  const loadResponsibles = async (options?: {
+    clearMessage?: boolean;
+    suppressErrorMessage?: boolean;
+  }) => {
+    setIsLoadingResponsibles(true);
+
+    if (options?.clearMessage ?? true) {
+      setMessage(null);
+    }
+
+    try {
+      const nextResponsibles = await getResponsibles();
+      setResponsibles(nextResponsibles);
+      return true;
+    } catch (error) {
+      setResponsibles([]);
+
+      if (!(options?.suppressErrorMessage ?? false)) {
+        setMessage({
+          type: 'error',
+          text:
+            error instanceof Error
+              ? error.message
+              : 'No se pudo conectar con el backend para cargar responsables.',
+        });
+      }
+
+      return false;
+    } finally {
+      setIsLoadingResponsibles(false);
     }
   };
 
@@ -825,6 +880,7 @@ function AdministrationDashboardPage() {
       void loadRfidPrograms({ clearMessage: false });
       void loadProgrammingRecords({ clearMessage: false });
       void loadReportResponsibles({ clearMessage: false });
+      void loadResponsibles({ clearMessage: false });
       void loadPrintInterruptions({ clearMessage: false });
       void loadVerificationReports({ clearMessage: false });
       void loadUsers({ clearMessage: false });
@@ -888,6 +944,22 @@ function AdministrationDashboardPage() {
     }
   };
 
+  const handleCreateResponsible = async (payload: {
+    name: string;
+    area: ResponsibleArea;
+  }) => {
+    await createResponsible(payload);
+    setIsCreateResponsibleModalOpen(false);
+    const didRefreshList = await loadResponsibles({ clearMessage: false });
+  
+    if (didRefreshList) {
+      setMessage({
+        type: 'success',
+        text: 'Responsable creado correctamente.',
+      });
+    }
+  };
+
   const handleUpdatePartConfig = async (payload: PartConfigMutationPayload) => {
     if (!editingPartConfig) {
       throw new Error('No se encontro la configuracion que se quiere editar.');
@@ -935,6 +1007,26 @@ function AdministrationDashboardPage() {
       setMessage({
         type: 'success',
         text: result.message,
+      });
+    }
+  };
+
+  const handleUpdateResponsible = async (payload: {
+    name: string;
+    area: ResponsibleArea;
+  }) => {
+    if (!editingResponsible) {
+      throw new Error('No se encontro el responsable que se quiere editar.');
+    }
+  
+    await updateResponsible(editingResponsible._id, payload);
+    setEditingResponsible(null);
+    const didRefreshList = await loadResponsibles({ clearMessage: false });
+  
+    if (didRefreshList) {
+      setMessage({
+        type: 'success',
+        text: 'Responsable actualizado correctamente.',
       });
     }
   };
@@ -1336,6 +1428,53 @@ function AdministrationDashboardPage() {
       });
     } finally {
       setIsSubmittingUserAction(false);
+    }
+  };
+
+  const handleConfirmPendingResponsibleAction = async () => {
+    if (!pendingResponsibleAction) {
+      return;
+    }
+
+    setIsSubmittingResponsibleAction(true);
+
+    try {
+      const completedActionType = pendingResponsibleAction.type;
+
+      switch (pendingResponsibleAction.type) {
+        case 'activate':
+        case 'deactivate':
+          await toggleResponsibleStatus(pendingResponsibleAction.responsible._id);
+          break;
+        case 'delete':
+          await deleteResponsible(pendingResponsibleAction.responsible._id);
+          break;
+      }
+
+      setPendingResponsibleAction(null);
+      const didRefreshList = await loadResponsibles({ clearMessage: false });
+
+      if (didRefreshList) {
+        setMessage({
+          type: 'success',
+          text:
+            completedActionType === 'delete'
+              ? 'Responsable eliminado correctamente.'
+              : completedActionType === 'deactivate'
+                ? 'Responsable deshabilitado correctamente.'
+                : 'Responsable habilitado correctamente.',
+        });
+      }
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'No se pudo completar la accion solicitada para el responsable.',
+      });
+    } finally {
+      setIsSubmittingResponsibleAction(false);
     }
   };
 
@@ -2413,6 +2552,7 @@ function AdministrationDashboardPage() {
   );
 
   const renderReportResponsiblesSection = () => (
+    
     <section className='adminSectionStack'>
       <article className='adminInfoCard'>
         <div className='adminSectionCardHeader'>
@@ -2456,8 +2596,7 @@ function AdministrationDashboardPage() {
           <div className='adminFormGrid'>
             <label className='adminField'>
               <span>Responsable de manufactura</span>
-              <input
-                type='text'
+              <select
                 value={reportResponsiblesForm.manufacturingRepresentativeName}
                 onChange={(event) =>
                   setReportResponsiblesForm((currentForm) => ({
@@ -2465,15 +2604,26 @@ function AdministrationDashboardPage() {
                     manufacturingRepresentativeName: event.target.value,
                   }))
                 }
-                placeholder='Nombre completo'
-                disabled={isLoadingReportResponsibles || isSubmittingReportResponsibles}
-              />
+                disabled={
+                  isLoadingReportResponsibles ||
+                  isSubmittingReportResponsibles ||
+                  isLoadingResponsibles
+                }
+              >
+                <option value=''>Selecciona un responsable</option>
+                {responsibles
+                  .filter((responsible) => responsible.area === 'manufactura' && responsible.isActive)
+                  .map((responsible) => (
+                    <option key={responsible._id} value={responsible.name}>
+                      {responsible.name}
+                    </option>
+                  ))}
+              </select>
             </label>
 
             <label className='adminField'>
               <span>Responsable de calidad</span>
-              <input
-                type='text'
+              <select
                 value={reportResponsiblesForm.qualityRepresentativeName}
                 onChange={(event) =>
                   setReportResponsiblesForm((currentForm) => ({
@@ -2481,9 +2631,21 @@ function AdministrationDashboardPage() {
                     qualityRepresentativeName: event.target.value,
                   }))
                 }
-                placeholder='Nombre completo'
-                disabled={isLoadingReportResponsibles || isSubmittingReportResponsibles}
-              />
+                disabled={
+                  isLoadingReportResponsibles ||
+                  isSubmittingReportResponsibles ||
+                  isLoadingResponsibles
+                }
+              >
+                <option value=''>Selecciona un responsable</option>
+                {responsibles
+                  .filter((responsible) => responsible.area === 'calidad' && responsible.isActive)
+                  .map((responsible) => (
+                    <option key={responsible._id} value={responsible.name}>
+                      {responsible.name}
+                    </option>
+                  ))}
+              </select>
             </label>
           </div>
 
@@ -2505,6 +2667,116 @@ function AdministrationDashboardPage() {
             </button>
           </div>
         </form>
+      </div>
+
+      <div className='adminTableCard'>
+        <div className='adminTableHeader'>
+          <h3>Listado de responsables</h3>
+      
+          <div className='adminToolbarActions'>
+            <p className='adminTableMeta'>
+              {isLoadingResponsibles
+                ? 'Cargando...'
+                : `${responsibles.length} responsables encontrados`}
+            </p>
+      
+            <button
+              className='adminPrimaryButton'
+              type='button'
+              onClick={() => {
+                setMessage(null);
+                setIsCreateResponsibleModalOpen(true);
+              }}
+            >
+              Crear responsable
+            </button>
+          </div>
+        </div>
+
+        <div className='adminTableWrapper'>
+          <table className='adminTable'>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Area</th>
+                <th>Creacion</th>
+                <th>Estatus</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoadingResponsibles ? (
+                <tr>
+                  <td colSpan={5} className='adminTableEmpty'>
+                    Cargando responsables...
+                  </td>
+                </tr>
+              ) : responsibles.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className='adminTableEmpty'>
+                    No hay responsables registrados.
+                  </td>
+                </tr>
+              ) : (
+                responsibles.map((responsible) => (
+                  <tr key={responsible._id}>
+                    <td>{responsible.name}</td>
+                    <td>{responsible.area}</td>
+                    <td>{formatDate(responsible.createdAt)}</td>
+                    <td>
+                      <span className={`adminBadge ${responsible.isActive ? 'active' : 'inactive'}`}>
+                        {responsible.isActive ? 'Activo' : 'Inactivo'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className='adminActionRow adminIconActionRow'>
+                        <button
+                          className='adminActionButton adminIconActionButton'
+                          type='button'
+                          title='Editar'
+                          onClick={() => {
+                            setMessage(null);
+                            setEditingResponsible(responsible);
+                          }}
+                        >
+                          ✎
+                        </button>
+                        <button
+                          className='adminActionButton adminIconActionButton'
+                          type='button'
+                          title={responsible.isActive ? 'Desactivar' : 'Activar'}
+                          onClick={() => {
+                            setMessage(null);
+                            setPendingResponsibleAction({
+                              type: responsible.isActive ? 'deactivate' : 'activate',
+                              responsible,
+                            });
+                          }}
+                        >
+                          {responsible.isActive ? '⏸' : '▶'}
+                        </button>
+                        <button
+                          className='adminActionButton adminIconActionButton delete'
+                          type='button'
+                          title='Eliminar'
+                          onClick={() => {
+                            setMessage(null);
+                            setPendingResponsibleAction({
+                              type: 'delete',
+                              responsible,
+                            });
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
   );
@@ -2968,6 +3240,26 @@ function AdministrationDashboardPage() {
         />
       )}
 
+      {editingResponsible && (
+        <ResponsibleFormModal
+          isOpen={Boolean(editingResponsible)}
+          title='Editar responsable'
+          initialName={editingResponsible.name}
+          initialArea={editingResponsible.area}
+          onClose={() => setEditingResponsible(null)}
+          onSubmit={(payload) => void handleUpdateResponsible(payload)}
+        />
+      )}
+
+      <ResponsibleFormModal
+        isOpen={isCreateResponsibleModalOpen}
+        title='Crear responsable'
+        initialName=''
+        initialArea='manufactura'
+        onClose={() => setIsCreateResponsibleModalOpen(false)}
+        onSubmit={(payload) => void handleCreateResponsible(payload)}
+      />
+
       {editingServiceOrder && (
         <ServiceOrderFormModal
           title={`Editar ${editingServiceOrder.folio}`}
@@ -3187,6 +3479,36 @@ function AdministrationDashboardPage() {
           isSubmitting={isSubmittingUserAction}
           onCancel={() => setPendingUserAction(null)}
           onConfirm={handleConfirmPendingUserAction}
+        />
+      )}
+
+      {pendingResponsibleAction && (
+        <ConfirmActionModal
+          title={
+            pendingResponsibleAction.type === 'delete'
+              ? 'Confirmar eliminacion de responsable'
+              : pendingResponsibleAction.type === 'deactivate'
+                ? 'Confirmar deshabilitacion de responsable'
+                : 'Confirmar habilitacion de responsable'
+          }
+          message={
+            pendingResponsibleAction.type === 'delete'
+              ? `Se eliminara el responsable ${pendingResponsibleAction.responsible.name}. Esta accion no se puede deshacer. Deseas continuar?`
+              : pendingResponsibleAction.type === 'deactivate'
+                ? `Se deshabilitara el responsable ${pendingResponsibleAction.responsible.name}. No aparecera como opcion activa hasta ser habilitado de nuevo. Deseas continuar?`
+                : `Se habilitara el responsable ${pendingResponsibleAction.responsible.name}. Deseas continuar?`
+          }
+          confirmLabel={
+            pendingResponsibleAction.type === 'delete'
+              ? 'Eliminar'
+              : pendingResponsibleAction.type === 'deactivate'
+                ? 'Deshabilitar'
+                : 'Habilitar'
+          }
+          confirmVariant={pendingResponsibleAction.type === 'delete' ? 'danger' : 'default'}
+          isSubmitting={isSubmittingResponsibleAction}
+          onCancel={() => setPendingResponsibleAction(null)}
+          onConfirm={handleConfirmPendingResponsibleAction}
         />
       )}
 
