@@ -7,30 +7,37 @@ import { useAuth } from '../../context/useAuth';
 import '../../css/verificationDashboard.css';
 import { listPrintInterruptions } from '../../services/printInterruptionService';
 import {
+  resolveVerificationProgrammingRecord,
+  verifyProgrammingRecord,
+} from '../../services/programmingRecordService';
+import {
+  connectHardwareDevice,
+  listHardwareDevices,
+  readHardwarePayloadText,
+} from '../../services/rfidHardwareService';
+import {
   getServiceOrderById,
   listServiceOrders,
 } from '../../services/serviceOrderService';
-import {
-  resolveProgrammingRecord,
-  verifyProgrammingRecord,
-} from '../../services/programmingRecordService';
 import {
   createVerificationReport,
   markVerificationReportAsPrinted,
   markVerificationReportPrintInterrupted,
 } from '../../services/verificationReportService';
-import type {
-  PrintInterruption,
-} from '../../types/PrintInterruption';
+import type { PrintInterruption } from '../../types/PrintInterruption';
 import type {
   ProgrammingRecord,
-  ProgrammingRecordMatchStrategy,
   ProgrammingRecordMode,
   ResolveProgrammingRecordPayload,
-  ResolveProgrammingRecordResult,
+  ResolveVerificationProgrammingRecordPayload,
+  ResolvedVerificationRfidPayload,
   VerifyProgrammingRecordPayload,
   VerifyProgrammingRecordResponse,
 } from '../../types/ProgrammingRecord';
+import type {
+  ConnectionMethod,
+  HardwareDeviceSummary,
+} from '../../types/RfidProgramming';
 import type { ServiceOrder } from '../../types/ServiceOrder';
 import type {
   CreateVerificationReportPayload,
@@ -51,7 +58,12 @@ type VerificationFormState = {
   verificationNotes: string;
 };
 
-const buildDefaultVerifier = (username?: string) => username?.trim() || 'estacion-verificacion';
+const DEFAULT_CONNECTION_METHOD: ConnectionMethod = 'serial_port';
+const VERIFICATION_LIMIT_REACHED_MESSAGE =
+  'La orden de servicio seleccionada ya alcanzo la cantidad objetivo de verificacion.';
+
+const buildDefaultVerifier = (username?: string) =>
+  username?.trim() || 'estacion-verificacion';
 
 const INITIAL_FORM_VALUES = (username?: string): VerificationFormState => ({
   rawReference: '',
@@ -61,6 +73,24 @@ const INITIAL_FORM_VALUES = (username?: string): VerificationFormState => ({
   verifiedBy: buildDefaultVerifier(username),
   verificationNotes: '',
 });
+
+const getConnectionMethodLabel = (connectionMethod: ConnectionMethod) =>
+  connectionMethod === 'serial_port' ? 'Lector por COM' : 'Android USB/NFC';
+
+const getHardwareDeviceStatusLabel = (
+  deviceStatus?: HardwareDeviceSummary['status'],
+) => {
+  switch (deviceStatus) {
+    case 'unauthorized':
+      return 'sin autorizar';
+    case 'offline':
+      return 'offline';
+    case 'connected':
+      return 'conectado';
+    default:
+      return null;
+  }
+};
 
 const formatDateTime = (value?: string) => {
   if (!value) {
@@ -84,9 +114,9 @@ const formatModeLabel = (mode: ProgrammingRecordMode) => {
     case 'manual':
       return 'Manual';
     case 'single_scan':
-      return 'Escaneo único';
+      return 'Escaner codigo';
     case 'double_scan':
-      return 'Doble código';
+      return 'Doble codigo';
     default:
       return mode;
   }
@@ -102,21 +132,6 @@ const formatStatusLabel = (status: ProgrammingRecord['status']) => {
       return 'Verificado';
     default:
       return status;
-  }
-};
-
-const formatMatchStrategy = (strategy?: ProgrammingRecordMatchStrategy) => {
-  switch (strategy) {
-    case 'manual_raw_reference':
-      return 'Folio / parte / referencia manual';
-    case 'single_scan_raw':
-      return 'Escaneo único exacto';
-    case 'double_scan_raw':
-      return 'Doble código exacto';
-    case 'gs1_fields':
-      return 'Campos GS1';
-    default:
-      return 'N/D';
   }
 };
 
@@ -174,14 +189,21 @@ const getServiceOrderRemainingToVerify = (serviceOrder?: ServiceOrder | null) =>
     0,
   );
 
-const isServiceOrderVerificationLimitReached = (serviceOrder?: ServiceOrder | null) =>
-  getServiceOrderRemainingToVerify(serviceOrder) <= 0;
+const isServiceOrderVerificationLimitReached = (
+  serviceOrder?: ServiceOrder | null,
+) => getServiceOrderRemainingToVerify(serviceOrder) <= 0;
 
-const filterServiceOrdersWithVerificationCapacity = (serviceOrders: ServiceOrder[]) =>
-  serviceOrders.filter((serviceOrder) => !isServiceOrderVerificationLimitReached(serviceOrder));
+const filterServiceOrdersWithVerificationCapacity = (
+  serviceOrders: ServiceOrder[],
+) => serviceOrders.filter(
+  (serviceOrder) => !isServiceOrderVerificationLimitReached(serviceOrder),
+);
 
-const isServiceOrderReadyForVerificationReport = (serviceOrder?: ServiceOrder | null) =>
-  serviceOrder?.status === 'closed' && getServiceOrderRemainingToVerify(serviceOrder) === 0;
+const isServiceOrderReadyForVerificationReport = (
+  serviceOrder?: ServiceOrder | null,
+) =>
+  serviceOrder?.status === 'closed' &&
+  getServiceOrderRemainingToVerify(serviceOrder) === 0;
 
 const isAuthorizationError = (error: unknown) =>
   error instanceof Error &&
@@ -198,6 +220,31 @@ const shouldOpenVerificationReportModal = (
       !verificationReport.exists,
   );
 
+const summarizeProgrammingSource = (
+  programmingRecord: Pick<ProgrammingRecord, 'rawSourceData' | 'verificationData'>,
+) => ({
+  source:
+    programmingRecord.rawSourceData.rawReference ||
+    programmingRecord.rawSourceData.rawScan ||
+    [
+      programmingRecord.rawSourceData.firstBarcodeRaw,
+      programmingRecord.rawSourceData.secondBarcodeRaw,
+    ]
+      .filter(Boolean)
+      .join(' | ') ||
+    'N/D',
+  verification:
+    programmingRecord.verificationData?.rawReference ||
+    programmingRecord.verificationData?.rawScan ||
+    [
+      programmingRecord.verificationData?.firstBarcodeRaw,
+      programmingRecord.verificationData?.secondBarcodeRaw,
+    ]
+      .filter(Boolean)
+      .join(' | ') ||
+    'N/D',
+});
+
 function ValidationDashboardPage() {
   const navigate = useNavigate();
   const { user, token } = useAuth();
@@ -206,9 +253,13 @@ function ValidationDashboardPage() {
     INITIAL_FORM_VALUES(user?.username),
   );
   const [message, setMessage] = useState<FeedbackMessage | null>(null);
-  const [resolution, setResolution] = useState<ResolveProgrammingRecordResult | null>(null);
-  const [selectedProgrammingRecordId, setSelectedProgrammingRecordId] = useState<string | null>(null);
-  const [isResolving, setIsResolving] = useState(false);
+  const [selectedProgrammingRecord, setSelectedProgrammingRecord] =
+    useState<ProgrammingRecord | null>(null);
+  const [decodedRfidPayload, setDecodedRfidPayload] =
+    useState<ResolvedVerificationRfidPayload | null>(null);
+  const [rfidPayloadText, setRfidPayloadText] = useState('');
+  const [rfidTagId, setRfidTagId] = useState('');
+  const [isReadingRfid, setIsReadingRfid] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [relatedServiceOrder, setRelatedServiceOrder] = useState<ServiceOrder | null>(null);
   const [isLoadingRelatedServiceOrder, setIsLoadingRelatedServiceOrder] = useState(false);
@@ -221,27 +272,76 @@ function ValidationDashboardPage() {
     useState<VerificationReport | null>(null);
   const [isLoadingVerificationOrders, setIsLoadingVerificationOrders] = useState(false);
   const [verificationOrderOptions, setVerificationOrderOptions] = useState<ServiceOrder[]>([]);
-  const [selectedVerificationServiceOrderId, setSelectedVerificationServiceOrderId] = useState('');
+  const [selectedVerificationServiceOrderId, setSelectedVerificationServiceOrderId] =
+    useState('');
   const [isVerificationOrderLocked, setIsVerificationOrderLocked] = useState(false);
-  const [verificationOrderMessage, setVerificationOrderMessage] = useState<FeedbackMessage | null>(null);
-
-  const selectedProgrammingRecord =
-    resolution?.candidates.find((candidate) => candidate._id === selectedProgrammingRecordId) ?? null;
+  const [verificationOrderMessage, setVerificationOrderMessage] =
+    useState<FeedbackMessage | null>(null);
+  const [connectionMethod, setConnectionMethod] = useState<ConnectionMethod>(
+    DEFAULT_CONNECTION_METHOD,
+  );
+  const [availableDevices, setAvailableDevices] = useState<HardwareDeviceSummary[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState('');
+  const [connectedDevice, setConnectedDevice] = useState<HardwareDeviceSummary | null>(
+    null,
+  );
+  const [isLoadingDevices, setIsLoadingDevices] = useState(false);
+  const [isConnectingDevice, setIsConnectingDevice] = useState(false);
+  const [hardwareMessage, setHardwareMessage] = useState<FeedbackMessage | null>(null);
 
   const selectedVerificationServiceOrder = verificationOrderOptions.find(
     (serviceOrder) => serviceOrder._id === selectedVerificationServiceOrderId,
   );
-  const hasSelectedVerificationServiceOrder = Boolean(selectedVerificationServiceOrderId);
+  const selectedAvailableDevice =
+    availableDevices.find((device) => device.id === selectedDeviceId) ?? null;
+  const hasSelectedVerificationServiceOrder = Boolean(
+    selectedVerificationServiceOrderId,
+  );
+  const isAndroidManualAssisted = connectionMethod === 'android_usb_nfc';
+  const isHardwareReady = isAndroidManualAssisted || Boolean(connectedDevice);
+
+  const currentDateTimeLabel = new Intl.DateTimeFormat('es-MX', {
+    dateStyle: 'medium',
+    timeStyle: 'medium',
+  }).format(new Date());
+
+  const hardwareDeviceLabel = isAndroidManualAssisted
+    ? 'telefono con NFC Tools'
+    : connectedDevice?.name ?? selectedAvailableDevice?.name ?? 'sin seleccionar';
+
+  const hardwareStatusText = isAndroidManualAssisted
+    ? 'manual asistido'
+    : connectedDevice?.status === 'connected'
+      ? connectedDevice.isSimulated
+        ? 'conectado (simulado)'
+        : 'conectado'
+      : getHardwareDeviceStatusLabel(selectedAvailableDevice?.status) ?? 'sin conectar';
+
+  const verificationRuleCopy =
+    mode === 'manual'
+      ? 'En modo manual, el backend debe validar que el payload RFID corresponda al mismo numero de parte capturado.'
+      : 'En modo con codigos, el backend debe validar que el payload RFID corresponda al mismo numero de parte, lote y fecha detectados.';
+
+  const clearResolvedVerificationState = useCallback(() => {
+    setSelectedProgrammingRecord(null);
+    setDecodedRfidPayload(null);
+    setRelatedServiceOrder(null);
+    setRelatedServiceOrderError(null);
+  }, []);
+
+  const resetVerificationResolution = useCallback(() => {
+    clearResolvedVerificationState();
+    setRfidPayloadText('');
+    setRfidTagId('');
+  }, [clearResolvedVerificationState]);
 
   const loadVerificationServiceOrders = useCallback(
     async (preferredServiceOrderId = selectedVerificationServiceOrderId) => {
-      
       setIsLoadingVerificationOrders(true);
       setVerificationOrderMessage(null);
 
       try {
         const serviceOrders = await listServiceOrders();
-
         const availableServiceOrders =
           filterServiceOrdersWithVerificationCapacity(serviceOrders);
 
@@ -282,21 +382,6 @@ function ValidationDashboardPage() {
     },
     [selectedVerificationServiceOrderId],
   );
-
-  const handleVerificationServiceOrderSelection = (nextServiceOrderId: string) => {
-    setSelectedVerificationServiceOrderId(nextServiceOrderId);
-    setVerificationOrderMessage(null);
-
-    if (!nextServiceOrderId) {
-      setIsVerificationOrderLocked(false);
-      return;
-    }
-
-    setVerificationOrderMessage({
-      type: 'info',
-      text: 'Orden seleccionada correctamente. No podra cambiarse al iniciar la verificacion.',
-    });
-  };
 
   const loadRelatedServiceOrder = useCallback(
     async (serviceOrderId: string): Promise<ServiceOrder | null> => {
@@ -357,40 +442,36 @@ function ValidationDashboardPage() {
     }
   }, [token]);
 
-  const maybeOpenVerificationReportModal = (
-    serviceOrder?: ServiceOrder | null,
-    verificationReport?: VerifyProgrammingRecordResponse['data']['verificationReport'],
-  ) => {
-    if (
-      !serviceOrder ||
-      creatingVerificationReportFor?._id === serviceOrder._id ||
-      !shouldOpenVerificationReportModal(serviceOrder, verificationReport)
-    ) {
-      return;
-    }
+  const maybeOpenVerificationReportModal = useCallback(
+    (
+      serviceOrder?: ServiceOrder | null,
+      verificationReport?: VerifyProgrammingRecordResponse['data']['verificationReport'],
+    ) => {
+      if (
+        !serviceOrder ||
+        creatingVerificationReportFor?._id === serviceOrder._id ||
+        !shouldOpenVerificationReportModal(serviceOrder, verificationReport)
+      ) {
+        return;
+      }
 
-    setCreatingVerificationReportFor(serviceOrder);
-  };
-
-  const resetResolutionState = () => {
-    setResolution(null);
-    setSelectedProgrammingRecordId(null);
-    setRelatedServiceOrder(null);
-    setRelatedServiceOrderError(null);
-  };
+      setCreatingVerificationReportFor(serviceOrder);
+    },
+    [creatingVerificationReportFor?._id],
+  );
 
   const resetFormForMode = (nextMode: ProgrammingRecordMode) => {
     setMode(nextMode);
     setIsVerificationOrderLocked(true);
     setMessage(null);
-    resetResolutionState();
+    resetVerificationResolution();
     setFormValues((currentValues) => ({
       rawReference: '',
       rawScan: '',
       firstBarcodeRaw: '',
       secondBarcodeRaw: '',
       verifiedBy: currentValues.verifiedBy || buildDefaultVerifier(user?.username),
-      verificationNotes: currentValues.verificationNotes,
+      verificationNotes: '',
     }));
   };
 
@@ -419,17 +500,212 @@ function ValidationDashboardPage() {
   }, [loadVerificationServiceOrders]);
 
   useEffect(() => {
-    const serviceOrderId = selectedProgrammingRecord?.serviceOrderId;
-
-    if (!serviceOrderId) {
-      setRelatedServiceOrder(null);
-      setRelatedServiceOrderError(null);
-      setIsLoadingRelatedServiceOrder(false);
+    if (isAndroidManualAssisted) {
+      setIsLoadingDevices(false);
+      setAvailableDevices([]);
+      setSelectedDeviceId('');
+      setConnectedDevice(null);
+      setHardwareMessage({
+        type: 'info',
+        text: 'Modo manual asistido: usa NFC Tools en el telefono para leer el tagId y el texto RFID, luego pegalos en esta pantalla.',
+      });
       return;
     }
 
-    void loadRelatedServiceOrder(serviceOrderId);
-  }, [loadRelatedServiceOrder, selectedProgrammingRecord?.serviceOrderId]);
+    let isCancelled = false;
+
+    void (async () => {
+      setIsLoadingDevices(true);
+      setHardwareMessage(null);
+
+      try {
+        const nextDevices = await listHardwareDevices(connectionMethod);
+
+        if (isCancelled) {
+          return;
+        }
+
+        setAvailableDevices(nextDevices);
+        setSelectedDeviceId((currentDeviceId) => {
+          if (
+            currentDeviceId &&
+            nextDevices.some((device) => device.id === currentDeviceId)
+          ) {
+            return currentDeviceId;
+          }
+
+          return nextDevices[0]?.id ?? '';
+        });
+
+        if (nextDevices.length === 0) {
+          setHardwareMessage({
+            type: 'info',
+            text: `No hay dispositivos disponibles para ${getConnectionMethodLabel(connectionMethod)}.`,
+          });
+          return;
+        }
+
+        if (nextDevices.some((device) => device.status === 'unauthorized')) {
+          setHardwareMessage({
+            type: 'error',
+            text: 'ADB detecto un telefono Android, pero sigue sin autorizarse la depuracion USB.',
+          });
+        }
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        setAvailableDevices([]);
+        setSelectedDeviceId('');
+        setHardwareMessage({
+          type: 'error',
+          text:
+            error instanceof Error
+              ? error.message
+              : 'No se pudieron cargar los dispositivos RFID locales.',
+        });
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingDevices(false);
+        }
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [connectionMethod, isAndroidManualAssisted]);
+
+  const handleVerificationServiceOrderSelection = (nextServiceOrderId: string) => {
+    setSelectedVerificationServiceOrderId(nextServiceOrderId);
+    setVerificationOrderMessage(null);
+    setMessage(null);
+    resetVerificationResolution();
+
+    if (!nextServiceOrderId) {
+      setIsVerificationOrderLocked(false);
+      return;
+    }
+
+    setIsVerificationOrderLocked(true);
+    setVerificationOrderMessage({
+      type: 'info',
+      text: 'Orden seleccionada correctamente. No podra cambiarse hasta completar la cantidad objetivo.',
+    });
+  };
+
+  const handleConnectionMethodChange = (nextMethod: ConnectionMethod) => {
+    setConnectionMethod(nextMethod);
+    setAvailableDevices([]);
+    setSelectedDeviceId('');
+    setConnectedDevice(null);
+    setHardwareMessage(null);
+    resetVerificationResolution();
+  };
+
+  const handleRefreshDevices = async () => {
+    if (isAndroidManualAssisted) {
+      setHardwareMessage({
+        type: 'info',
+        text: 'En Android USB/NFC no se requiere conectar el telefono para esta prueba manual. Lee la etiqueta en NFC Tools y pega tagId y texto RFID.',
+      });
+      return;
+    }
+
+    setIsLoadingDevices(true);
+    setHardwareMessage(null);
+
+    try {
+      const nextDevices = await listHardwareDevices(connectionMethod);
+      setAvailableDevices(nextDevices);
+
+      const preferredDeviceId =
+        nextDevices.find((device) => device.id === selectedDeviceId)?.id ??
+        nextDevices[0]?.id ??
+        '';
+      setSelectedDeviceId(preferredDeviceId);
+
+      if (nextDevices.length === 0) {
+        setConnectedDevice(null);
+        setHardwareMessage({
+          type: 'info',
+          text: `No se detectaron dispositivos para ${getConnectionMethodLabel(connectionMethod)}.`,
+        });
+        return;
+      }
+
+      if (nextDevices.some((device) => device.status === 'unauthorized')) {
+        setConnectedDevice(null);
+        setHardwareMessage({
+          type: 'error',
+          text: 'ADB detecto un telefono Android, pero sigue sin autorizarse la depuracion USB.',
+        });
+        return;
+      }
+
+      setHardwareMessage({
+        type: 'success',
+        text: `${nextDevices.length} dispositivo(s) detectado(s).`,
+      });
+    } catch (error) {
+      setAvailableDevices([]);
+      setSelectedDeviceId('');
+      setConnectedDevice(null);
+      setHardwareMessage({
+        type: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'No se pudieron actualizar los dispositivos RFID.',
+      });
+    } finally {
+      setIsLoadingDevices(false);
+    }
+  };
+
+  const handleConnectDevice = async () => {
+    if (isAndroidManualAssisted) {
+      setHardwareMessage({
+        type: 'info',
+        text: 'En Android USB/NFC esta prueba es manual asistida. No necesitas conectar el telefono desde esta pantalla.',
+      });
+      return;
+    }
+
+    if (!selectedDeviceId) {
+      setHardwareMessage({
+        type: 'error',
+        text: 'Selecciona primero un dispositivo para continuar.',
+      });
+      return;
+    }
+
+    setIsConnectingDevice(true);
+    setHardwareMessage(null);
+
+    try {
+      const device = await connectHardwareDevice(connectionMethod, selectedDeviceId);
+      setConnectedDevice(device);
+      setHardwareMessage({
+        type: 'success',
+        text: device.isSimulated
+          ? `Conectado en modo simulado con ${device.name}.`
+          : `Conectado correctamente con ${device.name}.`,
+      });
+    } catch (error) {
+      setConnectedDevice(null);
+      setHardwareMessage({
+        type: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'No se pudo conectar el dispositivo RFID.',
+      });
+    } finally {
+      setIsConnectingDevice(false);
+    }
+  };
 
   const buildResolvePayload = (): ResolveProgrammingRecordPayload => {
     if (mode === 'manual') {
@@ -455,6 +731,8 @@ function ValidationDashboardPage() {
 
   const buildVerifyPayload = (): VerifyProgrammingRecordPayload => {
     const basePayload: VerifyProgrammingRecordPayload = {
+      rfidPayloadText: rfidPayloadText.trim() || undefined,
+      tagId: rfidTagId.trim() || undefined,
       verifiedBy: formValues.verifiedBy.trim() || undefined,
       verificationNotes: formValues.verificationNotes.trim() || undefined,
     };
@@ -482,24 +760,27 @@ function ValidationDashboardPage() {
 
   const validateCurrentEvidence = () => {
     if (mode === 'manual' && !formValues.rawReference.trim()) {
-      return 'Captura el folio de la orden, el numero de parte o la referencia manual guardada.';
+      return 'Captura el numero de parte o la referencia manual antes de leer la etiqueta RFID.';
     }
 
     if (mode === 'single_scan' && !formValues.rawScan.trim()) {
-      return 'Captura el raw scan para resolver la programacion.';
+      return 'Captura el codigo GS1 antes de leer la etiqueta RFID.';
     }
 
     if (
       mode === 'double_scan' &&
       (!formValues.firstBarcodeRaw.trim() || !formValues.secondBarcodeRaw.trim())
     ) {
-      return 'Captura ambos codigos para resolver la programacion.';
+      return 'Captura ambos codigos antes de leer la etiqueta RFID.';
     }
 
     return null;
   };
 
-  const handleResolve = async () => {
+  const resolveVerificationFromRfid = async (
+    nextPayloadText: string,
+    nextTagId: string,
+  ) => {
     if (!selectedVerificationServiceOrderId) {
       setVerificationOrderMessage({
         type: 'error',
@@ -507,6 +788,15 @@ function ValidationDashboardPage() {
       });
       return;
     }
+
+    if (isServiceOrderVerificationLimitReached(selectedVerificationServiceOrder)) {
+      setVerificationOrderMessage({
+        type: 'error',
+        text: VERIFICATION_LIMIT_REACHED_MESSAGE,
+      });
+      return;
+    }
+
     const validationError = validateCurrentEvidence();
 
     if (validationError) {
@@ -517,35 +807,131 @@ function ValidationDashboardPage() {
       return;
     }
 
-    setIsResolving(true);
+    const normalizedPayloadText = nextPayloadText.trim();
+    const normalizedTagId = nextTagId.trim();
+
+    if (!normalizedPayloadText) {
+      setMessage({
+        type: 'error',
+        text: 'Captura o lee primero el texto RFID de la etiqueta antes de continuar.',
+      });
+      return;
+    }
+
+    if (!normalizedTagId) {
+      setMessage({
+        type: 'error',
+        text: 'Captura o lee primero el tagId de la etiqueta antes de continuar.',
+      });
+      return;
+    }
+
+    setIsVerificationOrderLocked(true);
+    setIsReadingRfid(true);
     setMessage(null);
-    resetResolutionState();
+    clearResolvedVerificationState();
+    setRfidPayloadText(normalizedPayloadText);
+    setRfidTagId(normalizedTagId);
 
     try {
-      const result = await resolveProgrammingRecord(buildResolvePayload());
-      setResolution(result.data);
+      const resolvePayload: ResolveVerificationProgrammingRecordPayload = {
+        serviceOrderId: selectedVerificationServiceOrderId,
+        rfidPayloadText: normalizedPayloadText,
+        tagId: normalizedTagId,
+        ...buildResolvePayload(),
+      };
 
-      if (result.data.autoSelectedProgrammingRecordId) {
-        setSelectedProgrammingRecordId(result.data.autoSelectedProgrammingRecordId);
+      const result = await resolveVerificationProgrammingRecord(resolvePayload);
+      const resolvedProgrammingRecord = result.data.programmingRecord;
+
+      if (
+        resolvedProgrammingRecord.serviceOrderId &&
+        resolvedProgrammingRecord.serviceOrderId !== selectedVerificationServiceOrderId
+      ) {
+        throw new Error(
+          'La etiqueta RFID no corresponde a la orden de servicio seleccionada.',
+        );
+      }
+
+      setDecodedRfidPayload(result.data.rfidPayload);
+      setSelectedProgrammingRecord(resolvedProgrammingRecord);
+
+      if (result.data.serviceOrder) {
+        setRelatedServiceOrder(result.data.serviceOrder);
+        setRelatedServiceOrderError(null);
+      } else if (resolvedProgrammingRecord.serviceOrderId) {
+        await loadRelatedServiceOrder(resolvedProgrammingRecord.serviceOrderId);
+      }
+
+      if (resolvedProgrammingRecord.status === 'verified') {
+        setMessage({
+          type: 'error',
+          text: 'Esta etiqueta ya fue revisada.',
+        });
+        return;
       }
 
       setMessage({
-        type:
-          result.data.candidateCount === 0
-            ? 'error'
-            : result.data.candidateCount === 1
-              ? 'success'
-              : 'info',
+        type: 'success',
         text: result.message,
       });
     } catch (error) {
       setMessage({
         type: 'error',
-        text: error instanceof Error ? error.message : 'No se pudo resolver la programacion.',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'No se pudo resolver la etiqueta RFID para verificacion.',
       });
     } finally {
-      setIsResolving(false);
+      setIsReadingRfid(false);
     }
+  };
+
+  const handleReadRfid = async () => {
+    if (!connectedDevice) {
+      setHardwareMessage({
+        type: 'error',
+        text: 'Conecta primero un dispositivo RFID antes de continuar.',
+      });
+      return;
+    }
+
+    try {
+      const readResult = await readHardwarePayloadText(
+        connectionMethod,
+        connectedDevice.id,
+      );
+
+      const payloadText = readResult.payloadText.trim();
+      const tagId = readResult.tagId?.trim() || '';
+
+      if (!payloadText) {
+        throw new Error(
+          'El lector no devolvio contenido RFID legible para continuar con la verificacion.',
+        );
+      }
+
+      if (!tagId) {
+        throw new Error(
+          'El lector RFID debe devolver tambien el tagId para validar que la etiqueta no se repita.',
+        );
+      }
+
+      await resolveVerificationFromRfid(payloadText, tagId);
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'No se pudo leer la etiqueta RFID para verificacion.',
+      });
+    }
+  };
+
+  const handleResolveManualRfid = async () => {
+    await resolveVerificationFromRfid(rfidPayloadText, rfidTagId);
   };
 
   const handleVerify = async () => {
@@ -557,21 +943,45 @@ function ValidationDashboardPage() {
       return;
     }
 
-    if (
-      selectedProgrammingRecord?.serviceOrderId &&
-      selectedProgrammingRecord.serviceOrderId !== selectedVerificationServiceOrderId
-    ) {
+    if (!selectedProgrammingRecord) {
       setMessage({
         type: 'error',
-        text: 'El registro seleccionado no pertenece a la orden de servicio elegida.',
+        text: 'Primero lee una etiqueta RFID valida para continuar.',
       });
       return;
     }
 
-    if (!selectedProgrammingRecord) {
+    if (!rfidPayloadText.trim()) {
       setMessage({
         type: 'error',
-        text: 'Selecciona primero un programming record candidato.',
+        text: 'No se encontro el contenido RFID leido para esta verificacion.',
+      });
+      return;
+    }
+
+    if (!rfidTagId.trim()) {
+      setMessage({
+        type: 'error',
+        text: 'No se encontro el tagId leido para esta verificacion.',
+      });
+      return;
+    }
+
+    if (
+      selectedProgrammingRecord.serviceOrderId &&
+      selectedProgrammingRecord.serviceOrderId !== selectedVerificationServiceOrderId
+    ) {
+      setMessage({
+        type: 'error',
+        text: 'El registro resuelto no pertenece a la orden de servicio elegida.',
+      });
+      return;
+    }
+
+    if (selectedProgrammingRecord.status === 'verified') {
+      setMessage({
+        type: 'error',
+        text: 'Esta etiqueta ya fue revisada.',
       });
       return;
     }
@@ -582,14 +992,6 @@ function ValidationDashboardPage() {
       setMessage({
         type: 'error',
         text: validationError,
-      });
-      return;
-    }
-
-    if (selectedProgrammingRecord.status === 'verified') {
-      setMessage({
-        type: 'success',
-        text: 'El codigo escaneado ya fue verificado.',
       });
       return;
     }
@@ -605,20 +1007,7 @@ function ValidationDashboardPage() {
       const verifiedProgrammingRecord = result.data.programmingRecord;
       const refreshedServiceOrder = result.data.serviceOrder ?? null;
 
-      setResolution((currentResolution) => {
-        if (!currentResolution) {
-          return currentResolution;
-        }
-
-        return {
-          ...currentResolution,
-          candidates: currentResolution.candidates.map((candidate) =>
-            candidate._id === verifiedProgrammingRecord._id ? verifiedProgrammingRecord : candidate,
-          ),
-        };
-      });
-
-      setSelectedProgrammingRecordId(verifiedProgrammingRecord._id);
+      setSelectedProgrammingRecord(verifiedProgrammingRecord);
 
       if (refreshedServiceOrder) {
         setRelatedServiceOrder(refreshedServiceOrder);
@@ -631,8 +1020,11 @@ function ValidationDashboardPage() {
         type: 'success',
         text: result.message,
       });
+
       await loadVerificationServiceOrders(
-        refreshedServiceOrder?._id ?? verifiedProgrammingRecord.serviceOrderId ?? selectedVerificationServiceOrderId,
+        refreshedServiceOrder?._id ??
+          verifiedProgrammingRecord.serviceOrderId ??
+          selectedVerificationServiceOrderId,
       );
 
       maybeOpenVerificationReportModal(
@@ -642,7 +1034,10 @@ function ValidationDashboardPage() {
     } catch (error) {
       setMessage({
         type: 'error',
-        text: error instanceof Error ? error.message : 'No se pudo verificar la programacion.',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'No se pudo verificar la programacion.',
       });
     } finally {
       setIsVerifying(false);
@@ -651,14 +1046,17 @@ function ValidationDashboardPage() {
 
   const handleReset = () => {
     setMessage(null);
-    resetResolutionState();
+    resetVerificationResolution();
     setFormValues((currentValues) => ({
       ...INITIAL_FORM_VALUES(user?.username),
-      verifiedBy: currentValues.verifiedBy.trim() || buildDefaultVerifier(user?.username),
+      verifiedBy:
+        currentValues.verifiedBy.trim() || buildDefaultVerifier(user?.username),
     }));
   };
 
-  const handleCreateVerificationReport = async (payload: CreateVerificationReportPayload) => {
+  const handleCreateVerificationReport = async (
+    payload: CreateVerificationReportPayload,
+  ) => {
     const result = await createVerificationReport(payload);
     setCreatingVerificationReportFor(null);
     setActiveVerificationReportPrintFlow(result.data);
@@ -668,16 +1066,22 @@ function ValidationDashboardPage() {
     });
   };
 
+  const selectedProgrammingSource = selectedProgrammingRecord
+    ? summarizeProgrammingSource(selectedProgrammingRecord)
+    : null;
+
   return (
     <AppSceneLayout>
       <section className='square verificationDashboardShell'>
         <div className='verificationDashboardCard'>
           <header className='verificationHeroCard'>
             <div className='verificationHeroCopy'>
-              <p className='verificationEyebrow'>Estación de verificacion</p>
-              <h1>Validación de registros programados</h1>
+              <p className='verificationEyebrow'>Estacion de verificacion</p>
+              <h1>Validacion por RFID programado</h1>
               <p>
-                Resuelve la evidencia capturada, elige el candidato correcto si hay más de uno y confirma la verificación contra el sistema.
+                Captura la evidencia base, lee la etiqueta RFID y confirma la
+                verificacion solo cuando el payload corresponda a la pieza
+                programada para la orden seleccionada.
               </p>
             </div>
 
@@ -692,12 +1096,127 @@ function ValidationDashboardPage() {
             </div>
           </header>
 
-          {message && <div className={`verificationMessage ${message.type}`}>{message.text}</div>}
           <article className='verificationPanelCard'>
             <div className='verificationPanelHeader'>
               <div>
-                <h2>Orden de Servicio</h2>
-                <p>Selecciona la orden que se verificara antes de resolver la evidencia.</p>
+                <h2>Conexion RFID</h2>
+                <p>
+                  {isAndroidManualAssisted
+                    ? 'Usa tu telefono con NFC Tools para leer la etiqueta y pegar manualmente el tagId y el texto RFID.'
+                    : 'Conecta el lector que se usara para leer el contenido RFID de la etiqueta ya programada.'}
+                </p>
+              </div>
+            </div>
+
+            <div className='verificationStatusCard'>
+              <div className='verificationStatusStack'>
+                <p>{`metodo: ${getConnectionMethodLabel(connectionMethod)}`}</p>
+                <p>{`dispositivo: ${hardwareDeviceLabel}`}</p>
+                <p>{`status: ${hardwareStatusText}`}</p>
+                <p>{`fecha/hora: ${currentDateTimeLabel}`}</p>
+              </div>
+
+              <div className='verificationConnectionGrid'>
+                <label className='verificationField'>
+                  <span>Metodo de conexion</span>
+                  <select
+                    aria-label='verificationConnectionMethod'
+                    value={connectionMethod}
+                    onChange={(event) =>
+                      handleConnectionMethodChange(
+                        event.target.value as ConnectionMethod,
+                      )
+                    }
+                    disabled={isLoadingDevices || isConnectingDevice || isReadingRfid || isVerifying}
+                  >
+                    <option value='serial_port'>Lector por COM</option>
+                    <option value='android_usb_nfc'>Android USB/NFC</option>
+                  </select>
+                </label>
+
+                {isAndroidManualAssisted ? (
+                  <div className='verificationHint verificationConnectionHelper'>
+                    En este modo no se conecta el telefono. Lee la etiqueta en
+                    NFC Tools y pega el <strong>tagId</strong> y el{' '}
+                    <strong>texto RFID</strong> en la captura manual de abajo.
+                  </div>
+                ) : (
+                  <>
+                    <label className='verificationField'>
+                      <span>Dispositivo</span>
+                      <select
+                        aria-label='verificationDevice'
+                        value={selectedDeviceId}
+                        onChange={(event) => setSelectedDeviceId(event.target.value)}
+                        disabled={
+                          isLoadingDevices ||
+                          isConnectingDevice ||
+                          isReadingRfid ||
+                          isVerifying
+                        }
+                      >
+                        <option value=''>Selecciona</option>
+                        {availableDevices.map((device) => (
+                          <option key={device.id} value={device.id}>
+                            {device.name}
+                            {device.isSimulated ? ' | simulado' : ''}
+                            {getHardwareDeviceStatusLabel(device.status)
+                              ? ` | ${getHardwareDeviceStatusLabel(device.status)}`
+                              : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <div className='verificationActionRow verificationConnectionActions'>
+                      <button
+                        className='buttonSelector verificationActionButton'
+                        type='button'
+                        onClick={() => void handleRefreshDevices()}
+                        disabled={
+                          isLoadingDevices ||
+                          isConnectingDevice ||
+                          isReadingRfid ||
+                          isVerifying
+                        }
+                      >
+                        {isLoadingDevices ? 'Buscando...' : 'Actualizar'}
+                      </button>
+                      <button
+                        className='buttonSelector verificationActionButton'
+                        type='button'
+                        onClick={() => void handleConnectDevice()}
+                        disabled={
+                          isLoadingDevices ||
+                          isConnectingDevice ||
+                          !selectedDeviceId ||
+                          isReadingRfid ||
+                          isVerifying
+                        }
+                      >
+                        {isConnectingDevice ? 'Conectando...' : 'Conectar'}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {hardwareMessage && (
+              <div className={`verificationMessage ${hardwareMessage.type}`}>
+                {hardwareMessage.text}
+              </div>
+            )}
+          </article>
+
+          <article className='verificationPanelCard'>
+            <div className='verificationPanelHeader'>
+              <div>
+                <h2>Orden de servicio</h2>
+                <p>
+                  Selecciona la orden que se verificara. Debe mantenerse fija
+                  hasta completar la cantidad objetivo.
+                </p>
               </div>
             </div>
 
@@ -706,8 +1225,15 @@ function ValidationDashboardPage() {
               <select
                 aria-label='verificationServiceOrderId'
                 value={selectedVerificationServiceOrderId}
-                onChange={(event) => handleVerificationServiceOrderSelection(event.target.value)}
-                disabled={isLoadingVerificationOrders || isVerificationOrderLocked}
+                onChange={(event) =>
+                  handleVerificationServiceOrderSelection(event.target.value)
+                }
+                disabled={
+                  isLoadingVerificationOrders ||
+                  isVerificationOrderLocked ||
+                  isReadingRfid ||
+                  isVerifying
+                }
               >
                 <option value=''>Selecciona</option>
                 {verificationOrderOptions.map((serviceOrder) => (
@@ -723,26 +1249,44 @@ function ValidationDashboardPage() {
             {selectedVerificationServiceOrder && (
               <div className='verificationSummaryGrid'>
                 <div className='verificationSummaryItem'>
-                  <span>Orden seleccionada</span>
+                  <span>Folio</span>
                   <strong>{selectedVerificationServiceOrder.folio}</strong>
                 </div>
                 <div className='verificationSummaryItem'>
-                  <span>Cantidad planeada</span>
+                  <span>Cantidad</span>
                   <strong>{selectedVerificationServiceOrder.quantity}</strong>
                 </div>
                 <div className='verificationSummaryItem'>
+                  <span>Programadas</span>
+                  <strong>
+                    {getServiceOrderProgrammedCount(selectedVerificationServiceOrder)}
+                  </strong>
+                </div>
+                <div className='verificationSummaryItem'>
                   <span>Verificadas</span>
-                  <strong>{getServiceOrderVerifiedCount(selectedVerificationServiceOrder)}</strong>
+                  <strong>
+                    {getServiceOrderVerifiedCount(selectedVerificationServiceOrder)}
+                  </strong>
+                </div>
+                <div className='verificationSummaryItem'>
+                  <span>Restan por programar</span>
+                  <strong>
+                    {getServiceOrderRemainingToProgram(selectedVerificationServiceOrder)}
+                  </strong>
                 </div>
                 <div className='verificationSummaryItem'>
                   <span>Restan por verificar</span>
-                  <strong>{getServiceOrderRemainingToVerify(selectedVerificationServiceOrder)}</strong>
+                  <strong>
+                    {getServiceOrderRemainingToVerify(selectedVerificationServiceOrder)}
+                  </strong>
                 </div>
               </div>
             )}
 
             {isVerificationOrderLocked && (
-              <p className='verificationHint'>Orden bloqueada hasta completar la cantidad objetivo.</p>
+              <p className='verificationHint'>
+                Orden bloqueada hasta completar la cantidad objetivo.
+              </p>
             )}
 
             {verificationOrderMessage && (
@@ -752,69 +1296,76 @@ function ValidationDashboardPage() {
             )}
           </article>
 
+          {message && <div className={`verificationMessage ${message.type}`}>{message.text}</div>}
+
           <div className='verificationMainGrid'>
             <article className='verificationPanelCard'>
               <div className='verificationPanelHeader'>
                 <div>
-                  <h2>Evidencia</h2>
-                  <p>Elige el modo y captura la evidencia con la que el sistema puede resolver el registro programado.</p>
+                  <h2>Evidencia base</h2>
+                  <p>
+                    Captura la referencia manual o los codigos de la pieza antes
+                    de leer la etiqueta RFID.
+                  </p>
                 </div>
               </div>
 
-              <div className='verificationModeSelector' role='tablist' aria-label='Modo de verificacion'>
-                {(['manual', 'single_scan', 'double_scan'] as ProgrammingRecordMode[]).map((modeOption) => (
-                  <button
-                    key={modeOption}
-                    className={`verificationModeButton ${mode === modeOption ? 'active' : ''}`}
-                    type='button'
-                    onClick={() => {
-                      if (!selectedVerificationServiceOrderId) {
-                        setVerificationOrderMessage({
-                          type: 'error',
-                          text: 'Selecciona primero una orden de servicio para verificar.',
-                        });
-                        return;
-                      }
+              <div
+                className='verificationModeSelector'
+                role='tablist'
+                aria-label='Modo de verificacion'
+              >
+                {(['manual', 'single_scan', 'double_scan'] as ProgrammingRecordMode[]).map(
+                  (modeOption) => (
+                    <button
+                      key={modeOption}
+                      className={`verificationModeButton ${mode === modeOption ? 'active' : ''}`}
+                      type='button'
+                      onClick={() => {
+                        if (!selectedVerificationServiceOrderId) {
+                          setVerificationOrderMessage({
+                            type: 'error',
+                            text: 'Selecciona primero una orden de servicio para verificar.',
+                          });
+                          return;
+                        }
 
-                      resetFormForMode(modeOption);
-                    }}
-                    disabled={!hasSelectedVerificationServiceOrder || isResolving || isVerifying}
-                  >
-                    {formatModeLabel(modeOption)}
-                  </button>
-                ))}
+                        resetFormForMode(modeOption);
+                      }}
+                      disabled={
+                        !hasSelectedVerificationServiceOrder ||
+                        isReadingRfid ||
+                        isVerifying
+                      }
+                    >
+                      {formatModeLabel(modeOption)}
+                    </button>
+                  ),
+                )}
               </div>
 
               <div className='verificationFormGrid'>
                 {mode === 'manual' && (
-                  <>
-                    <label className='verificationField verificationFieldFull'>
-                      <span>Referencia manual / folio</span>
-                      <input
-                        type='text'
-                        value={formValues.rawReference}
-                        onChange={(event) =>
-                          setFormValues((currentValues) => ({
-                            ...currentValues,
-                            rawReference: event.target.value,
-                          }))
-                        }
-                        placeholder='ML20260519140228 o A2A00231'
-                        disabled={isResolving || isVerifying}
-                      />
-                    </label>
-
-                    <div className='verificationHint verificationFieldFull'>
-                      Usa el folio de la orden manual, el numero de parte o la referencia guardada
-                      al programar. Para lecturas manuales nuevas, la referencia por defecto ya es
-                      el folio de la orden.
-                    </div>
-                  </>
+                  <label className='verificationField verificationFieldFull'>
+                    <span>Numero de parte / referencia manual</span>
+                    <input
+                      type='text'
+                      value={formValues.rawReference}
+                      onChange={(event) =>
+                        setFormValues((currentValues) => ({
+                          ...currentValues,
+                          rawReference: event.target.value,
+                        }))
+                      }
+                      placeholder='C32-25-001 o referencia manual guardada'
+                      disabled={isReadingRfid || isVerifying}
+                    />
+                  </label>
                 )}
 
                 {mode === 'single_scan' && (
                   <label className='verificationField verificationFieldFull'>
-                    <span>Escaneo original</span>
+                    <span>Codigo GS1</span>
                     <textarea
                       value={formValues.rawScan}
                       onChange={(event) =>
@@ -824,7 +1375,7 @@ function ValidationDashboardPage() {
                         }))
                       }
                       placeholder='0120845854081720112209011020220'
-                      disabled={isResolving || isVerifying}
+                      disabled={isReadingRfid || isVerifying}
                       rows={3}
                     />
                   </label>
@@ -833,7 +1384,23 @@ function ValidationDashboardPage() {
                 {mode === 'double_scan' && (
                   <>
                     <label className='verificationField'>
-                      <span>Segundo código original</span>
+                      <span>Primer codigo</span>
+                      <input
+                        type='text'
+                        value={formValues.firstBarcodeRaw}
+                        onChange={(event) =>
+                          setFormValues((currentValues) => ({
+                            ...currentValues,
+                            firstBarcodeRaw: event.target.value,
+                          }))
+                        }
+                        placeholder='(01)20845854081720'
+                        disabled={isReadingRfid || isVerifying}
+                      />
+                    </label>
+
+                    <label className='verificationField'>
+                      <span>Segundo codigo</span>
                       <input
                         type='text'
                         value={formValues.secondBarcodeRaw}
@@ -844,15 +1411,14 @@ function ValidationDashboardPage() {
                           }))
                         }
                         placeholder='1124010110LOT123456'
-                        disabled={isResolving || isVerifying}
+                        disabled={isReadingRfid || isVerifying}
                       />
                     </label>
                   </>
                 )}
 
-                
                 <label className='verificationField verificationFieldFull'>
-                  <span>Notas de verificación</span>
+                  <span>Notas de verificacion</span>
                   <textarea
                     value={formValues.verificationNotes}
                     onChange={(event) =>
@@ -861,35 +1427,145 @@ function ValidationDashboardPage() {
                         verificationNotes: event.target.value,
                       }))
                     }
-                    placeholder='Notas opcionales para la verificacion'
-                    disabled={isResolving || isVerifying}
+                    placeholder='Notas opcionales para esta verificacion'
+                    disabled={isReadingRfid || isVerifying}
                     rows={3}
                   />
                 </label>
               </div>
 
-              <p className='verificationHint'>
-                Se envia siempre `mode` en `resolve` para evitar matches cruzados por `gs1_fields`.
-              </p>
+              {isAndroidManualAssisted && (
+                <div className='verificationManualRfidGrid'>
+                  <label className='verificationField'>
+                    <span>tagId leido en NFC Tools</span>
+                    <input
+                      type='text'
+                      value={rfidTagId}
+                      onChange={(event) => setRfidTagId(event.target.value)}
+                      placeholder='E0:04:01:00:12:34:56:78'
+                      disabled={isReadingRfid || isVerifying}
+                    />
+                  </label>
+
+                  <label className='verificationField verificationFieldFull'>
+                    <span>Texto RFID leido en NFC Tools</span>
+                    <textarea
+                      value={rfidPayloadText}
+                      onChange={(event) => setRfidPayloadText(event.target.value)}
+                      placeholder='Pega aqui el texto o payload leido desde la etiqueta RFID'
+                      disabled={isReadingRfid || isVerifying}
+                      rows={4}
+                    />
+                  </label>
+                </div>
+              )}
+
+              <p className='verificationHint'>{verificationRuleCopy}</p>
 
               <div className='verificationActionRow'>
                 <button
                   className='buttonSelector verificationActionButton'
                   type='button'
-                  onClick={() => void handleResolve()}
-                  disabled={isResolving || isVerifying || !hasSelectedVerificationServiceOrder}
+                  onClick={() =>
+                    void (isAndroidManualAssisted
+                      ? handleResolveManualRfid()
+                      : handleReadRfid())
+                  }
+                  disabled={
+                    isReadingRfid ||
+                    isVerifying ||
+                    !hasSelectedVerificationServiceOrder ||
+                    !isHardwareReady
+                  }
                 >
-                  {isResolving ? 'Resolviendo...' : 'Resolver programación'}
+                  {isReadingRfid
+                    ? isAndroidManualAssisted
+                      ? 'Validando RFID...'
+                      : 'Leyendo RFID...'
+                    : isAndroidManualAssisted
+                      ? 'Validar datos RFID'
+                      : 'Leer etiqueta RFID'}
                 </button>
                 <button
                   className='buttonSelector verificationActionButton'
                   type='button'
                   onClick={handleReset}
-                  disabled={isResolving || isVerifying}
+                  disabled={isReadingRfid || isVerifying}
                 >
                   Limpiar
                 </button>
               </div>
+            </article>
+
+            <article className='verificationPanelCard'>
+              <div className='verificationPanelHeader'>
+                <div>
+                  <h2>Lectura RFID</h2>
+                  <p>
+                    El backend debe interpretar el payload RFID y validar que
+                    corresponda a la misma pieza capturada para esta orden.
+                  </p>
+                </div>
+              </div>
+
+              {!rfidPayloadText ? (
+                <p className='verificationEmptyState'>
+                  {isAndroidManualAssisted
+                    ? 'Pega el tagId y el texto RFID leidos en NFC Tools para ver el resultado de la validacion.'
+                    : 'Lee una etiqueta RFID para ver su contenido y el resultado de la validacion.'}
+                </p>
+              ) : (
+                <div className='verificationResolutionStack'>
+                  <div className='verificationNormalizedInputCard'>
+                    <h3>Payload RFID detectado</h3>
+                    <div className='verificationKeyValueGrid'>
+                      <div className='verificationKeyValueFull'>
+                        <span>Texto RFID</span>
+                        <strong>{rfidPayloadText}</strong>
+                      </div>
+                      <div>
+                        <span>tagId</span>
+                        <strong>{rfidTagId || 'N/D'}</strong>
+                      </div>
+                      <div>
+                        <span>Numero de parte</span>
+                        <strong>{decodedRfidPayload?.partNumber || 'N/D'}</strong>
+                      </div>
+                      {decodedRfidPayload?.rawPartNumber && (
+                        <div>
+                          <span>Parte leida RFID</span>
+                          <strong>{decodedRfidPayload.rawPartNumber}</strong>
+                        </div>
+                      )}
+                      <div>
+                        <span>Lote</span>
+                        <strong>{decodedRfidPayload?.lot || 'N/D'}</strong>
+                      </div>
+                      <div>
+                        <span>Fecha de manufactura</span>
+                        <strong>
+                          {formatGs1ManufactureDate(
+                            decodedRfidPayload?.manufactureDate,
+                          )}
+                        </strong>
+                      </div>
+                      {decodedRfidPayload?.tagId &&
+                        decodedRfidPayload.tagId !== rfidTagId && (
+                          <div>
+                            <span>tagId decodificado</span>
+                            <strong>{decodedRfidPayload.tagId}</strong>
+                          </div>
+                        )}
+                    </div>
+                  </div>
+
+                  <p className='verificationHint'>
+                    Si la etiqueta ya estaba verificada o si el payload no
+                    coincide con la evidencia base, el backend debe rechazar la
+                    operacion antes de habilitar la confirmacion final.
+                  </p>
+                </div>
+              )}
             </article>
           </div>
 
@@ -897,153 +1573,18 @@ function ValidationDashboardPage() {
             <article className='verificationPanelCard'>
               <div className='verificationPanelHeader'>
                 <div>
-                  <h2>Resolución</h2>
-                  <p>Revisa el match strategy, la entrada normalizada y el conjunto de candidatos.</p>
-                </div>
-              </div>
-
-              {!resolution ? (
-                <p className='verificationEmptyState'>
-                  Resuelve una evidencia para ver candidatos y datos normalizados.
-                </p>
-              ) : (
-                <div className='verificationResolutionStack'>
-                  <div className='verificationSummaryGrid'>
-                    <div className='verificationSummaryItem'>
-                      <span>Tipo de resolución</span>
-                      <strong>{resolution.resolutionType}</strong>
-                    </div>
-                    <div className='verificationSummaryItem'>
-                      <span>Coincidencia por</span>
-                      <strong>{formatMatchStrategy(resolution.matchedBy)}</strong>
-                    </div>
-                    <div className='verificationSummaryItem'>
-                      <span>Candidatos</span>
-                      <strong>{resolution.candidateCount}</strong>
-                    </div>
-                  </div>
-
-                  <div className='verificationNormalizedInputCard'>
-                    <h3>Entrada normalizada</h3>
-                    <div className='verificationKeyValueGrid'>
-                      <div>
-                        <span>Modo</span>
-                        <strong>{formatModeLabel(resolution.normalizedInput.mode)}</strong>
-                      </div>
-                      <div>
-                        <span>GTIN</span>
-                        <strong>{resolution.normalizedInput.gtin || 'N/D'}</strong>
-                      </div>
-                      <div>
-                        <span>Lote</span>
-                        <strong>{resolution.normalizedInput.lot || 'N/D'}</strong>
-                      </div>
-                      <div>
-                        <span>Fecha de fabricación</span>
-                        <strong>{formatGs1ManufactureDate(resolution.normalizedInput.manufactureDate)}</strong>
-                      </div>
-                      {resolution.normalizedInput.rawReference && (
-                        <div className='verificationKeyValueFull'>
-                          <span>Referencia manual</span>
-                          <strong>{resolution.normalizedInput.rawReference}</strong>
-                        </div>
-                      )}
-                      {resolution.normalizedInput.rawScan && (
-                        <div className='verificationKeyValueFull'>
-                          <span>Escaneo original</span>
-                          <strong>{resolution.normalizedInput.rawScan}</strong>
-                        </div>
-                      )}
-                      {resolution.normalizedInput.firstBarcodeRaw && (
-                        <div className='verificationKeyValueFull'>
-                          <span>Primer código original</span>
-                          <strong>{resolution.normalizedInput.firstBarcodeRaw}</strong>
-                        </div>
-                      )}
-                      {resolution.normalizedInput.secondBarcodeRaw && (
-                        <div className='verificationKeyValueFull'>
-                          <span>Segundo código original</span>
-                          <strong>{resolution.normalizedInput.secondBarcodeRaw}</strong>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className='verificationTableWrapper'>
-                    <table className='verificationTable'>
-                      <thead>
-                        <tr>
-                          <th>Selección</th>
-                          <th>Folio</th>
-                          <th>Modo</th>
-                          <th>Parte</th>
-                          <th>GTIN</th>
-                          <th>Lote</th>
-                          <th>Fecha</th>
-                          <th>Estado</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {resolution.candidateCount === 0 ? (
-                          <tr>
-                            <td colSpan={8} className='verificationTableEmpty'>
-                              No se encontraron candidatos con la evidencia capturada.
-                            </td>
-                          </tr>
-                        ) : (
-                          resolution.candidates.map((candidate) => (
-                            <tr
-                              key={candidate._id}
-                              className={
-                                selectedProgrammingRecordId === candidate._id
-                                  ? 'verificationTableRowSelected'
-                                  : ''
-                              }
-                            >
-                              <td>
-                                <button
-                                  className='buttonSelector verificationTableSelectButton'
-                                  type='button'
-                                  onClick={() => setSelectedProgrammingRecordId(candidate._id)}
-                                  disabled={isResolving || isVerifying}
-                                >
-                                  {selectedProgrammingRecordId === candidate._id ? 'Elegido' : 'Elegir'}
-                                </button>
-                              </td>
-                              <td>{candidate.serviceOrderFolio || 'N/D'}</td>
-                              <td>{formatModeLabel(candidate.mode)}</td>
-                              <td>{candidate.partNumber}</td>
-                              <td>{candidate.gtin || 'N/D'}</td>
-                              <td>{candidate.lot || 'N/D'}</td>
-                              <td>{formatGs1ManufactureDate(candidate.manufactureDate)}</td>
-                              <td>
-                                <span
-                                  className={`verificationStatusBadge ${candidate.status === 'verified' ? 'verified' : 'programmed'}`}
-                                >
-                                  {formatStatusLabel(candidate.status)}
-                                </span>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </article>
-
-            <article className='verificationPanelCard'>
-              <div className='verificationPanelHeader'>
-                <div>
-                  <h2>Confirmación</h2>
-                  <p>Se verifica contra el candidato seleccionado usando la misma evidencia enviada al resolver.</p>
+                  <h2>Confirmacion</h2>
+                  <p>
+                    Se confirma solo despues de que la lectura RFID y la
+                    evidencia base apunten al mismo registro programado.
+                  </p>
                 </div>
               </div>
 
               {!selectedProgrammingRecord ? (
                 <p className='verificationEmptyState'>
-                  Selecciona un candidato para revisar sus datos y confirmar la verificación.
+                  Lee una etiqueta RFID valida para revisar el registro resuelto
+                  y confirmar la verificacion.
                 </p>
               ) : (
                 <div className='verificationResolutionStack'>
@@ -1070,8 +1611,10 @@ function ValidationDashboardPage() {
                         <strong>{selectedProgrammingRecord.lot || 'N/D'}</strong>
                       </div>
                       <div>
-                        <span>Fecha de fabricación</span>
-                        <strong>{formatGs1ManufactureDate(selectedProgrammingRecord.manufactureDate)}</strong>
+                        <span>Fecha de manufactura</span>
+                        <strong>
+                          {formatGs1ManufactureDate(selectedProgrammingRecord.manufactureDate)}
+                        </strong>
                       </div>
                       <div>
                         <span>Programa RFID</span>
@@ -1087,95 +1630,14 @@ function ValidationDashboardPage() {
                       </div>
                       <div className='verificationKeyValueFull'>
                         <span>Datos de origen</span>
-                        <strong>
-                          {selectedProgrammingRecord.rawSourceData.rawReference ||
-                            selectedProgrammingRecord.rawSourceData.rawScan ||
-                            [
-                              selectedProgrammingRecord.rawSourceData.firstBarcodeRaw,
-                              selectedProgrammingRecord.rawSourceData.secondBarcodeRaw,
-                            ]
-                              .filter(Boolean)
-                              .join(' | ') ||
-                            'N/D'}
-                        </strong>
+                        <strong>{selectedProgrammingSource?.source || 'N/D'}</strong>
                       </div>
-                      {selectedProgrammingRecord.verificationData && (
-                        <div className='verificationKeyValueFull'>
-                          <span>Información de verificación</span>
-                          <strong>
-                            {selectedProgrammingRecord.verificationData.rawReference ||
-                              selectedProgrammingRecord.verificationData.rawScan ||
-                              [
-                                selectedProgrammingRecord.verificationData.firstBarcodeRaw,
-                                selectedProgrammingRecord.verificationData.secondBarcodeRaw,
-                              ]
-                                .filter(Boolean)
-                                .join(' | ') ||
-                              'N/D'}
-                          </strong>
-                        </div>
-                      )}
-                      <div>
-                        <span>Verified at</span>
-                        <strong>{formatDateTime(selectedProgrammingRecord.verifiedAt)}</strong>
+                      <div className='verificationKeyValueFull'>
+                        <span>Datos de verificacion</span>
+                        <strong>{selectedProgrammingSource?.verification || 'N/D'}</strong>
                       </div>
                     </div>
                   </div>
-
-                  {selectedProgrammingRecord.serviceOrderId && (
-                    <div className='verificationSelectedRecordCard'>
-                      <div className='verificationSelectedRecordHeader'>
-                        <div>
-                          <h3>Orden de servicio</h3>
-                          <p>{selectedProgrammingRecord.serviceOrderFolio || 'Sin folio'}</p>
-                        </div>
-                        {relatedServiceOrder && (
-                          <span
-                            className={`verificationStatusBadge ${
-                              relatedServiceOrder.status === 'closed' ? 'verified' : 'programmed'
-                            }`}
-                          >
-                            {formatServiceOrderStatus(relatedServiceOrder.status)}
-                          </span>
-                        )}
-                      </div>
-
-                      {isLoadingRelatedServiceOrder ? (
-                        <p className='verificationHint'>Consultando avance real de la orden...</p>
-                      ) : relatedServiceOrder ? (
-                        <div className='verificationKeyValueGrid'>
-                          <div>
-                            <span>Cantidad</span>
-                            <strong>{relatedServiceOrder.quantity}</strong>
-                          </div>
-                          <div>
-                            <span>Programadas</span>
-                            <strong>{getServiceOrderProgrammedCount(relatedServiceOrder)}</strong>
-                          </div>
-                          <div>
-                            <span>Verificadas</span>
-                            <strong>{getServiceOrderVerifiedCount(relatedServiceOrder)}</strong>
-                          </div>
-                          <div>
-                            <span>Restantes por programar</span>
-                            <strong>{getServiceOrderRemainingToProgram(relatedServiceOrder)}</strong>
-                          </div>
-                          <div>
-                            <span>Restantes por verificar</span>
-                            <strong>{getServiceOrderRemainingToVerify(relatedServiceOrder)}</strong>
-                          </div>
-                          <div>
-                            <span>Actualizado el</span>
-                            <strong>{formatDateTime(relatedServiceOrder.updatedAt)}</strong>
-                          </div>
-                        </div>
-                      ) : relatedServiceOrderError ? (
-                        <p className='verificationHint'>
-                          {relatedServiceOrderError ?? 'No se pudo consultar la orden de servicio.'}
-                        </p>
-                      ) : null}
-                    </div>
-                  )}
 
                   <div className='verificationActionRow'>
                     <button
@@ -1183,9 +1645,10 @@ function ValidationDashboardPage() {
                       type='button'
                       onClick={() => void handleVerify()}
                       disabled={
-                        isResolving ||
+                        isReadingRfid ||
                         isVerifying ||
                         !hasSelectedVerificationServiceOrder ||
+                        !rfidPayloadText.trim() ||
                         selectedProgrammingRecord.status === 'verified'
                       }
                     >
@@ -1195,11 +1658,127 @@ function ValidationDashboardPage() {
 
                   {selectedProgrammingRecord.status === 'verified' && (
                     <p className='verificationMessage success'>
-                      El codigo escaneado ya fue verificado.
+                      Esta etiqueta ya quedo verificada.
                     </p>
                   )}
                 </div>
               )}
+            </article>
+
+            <article className='verificationPanelCard'>
+              <div className='verificationPanelHeader'>
+                <div>
+                  <h2>Orden y avance</h2>
+                  <p>
+                    Revisa el estado actual de la orden mientras se van
+                    descartando las piezas ya verificadas.
+                  </p>
+                </div>
+              </div>
+
+              {!selectedVerificationServiceOrder && !relatedServiceOrder ? (
+                <p className='verificationEmptyState'>
+                  Selecciona una orden de servicio para consultar su avance.
+                </p>
+              ) : isLoadingRelatedServiceOrder ? (
+                <p className='verificationHint'>Consultando avance real de la orden...</p>
+              ) : relatedServiceOrder ? (
+                <div className='verificationResolutionStack'>
+                  <div className='verificationSelectedRecordCard'>
+                    <div className='verificationSelectedRecordHeader'>
+                      <div>
+                        <h3>Orden de servicio</h3>
+                        <p>{relatedServiceOrder.folio || 'Sin folio'}</p>
+                      </div>
+                      <span
+                        className={`verificationStatusBadge ${relatedServiceOrder.status === 'closed' ? 'verified' : 'programmed'}`}
+                      >
+                        {formatServiceOrderStatus(relatedServiceOrder.status)}
+                      </span>
+                    </div>
+
+                    <div className='verificationKeyValueGrid'>
+                      <div>
+                        <span>Cantidad</span>
+                        <strong>{relatedServiceOrder.quantity}</strong>
+                      </div>
+                      <div>
+                        <span>Programadas</span>
+                        <strong>{getServiceOrderProgrammedCount(relatedServiceOrder)}</strong>
+                      </div>
+                      <div>
+                        <span>Verificadas</span>
+                        <strong>{getServiceOrderVerifiedCount(relatedServiceOrder)}</strong>
+                      </div>
+                      <div>
+                        <span>Restan por programar</span>
+                        <strong>{getServiceOrderRemainingToProgram(relatedServiceOrder)}</strong>
+                      </div>
+                      <div>
+                        <span>Restan por verificar</span>
+                        <strong>{getServiceOrderRemainingToVerify(relatedServiceOrder)}</strong>
+                      </div>
+                      <div>
+                        <span>Actualizado el</span>
+                        <strong>{formatDateTime(relatedServiceOrder.updatedAt)}</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : relatedServiceOrderError ? (
+                <p className='verificationHint'>
+                  {relatedServiceOrderError ?? 'No se pudo consultar la orden de servicio.'}
+                </p>
+              ) : selectedVerificationServiceOrder ? (
+                <div className='verificationResolutionStack'>
+                  <div className='verificationSelectedRecordCard'>
+                    <div className='verificationSelectedRecordHeader'>
+                      <div>
+                        <h3>Orden de servicio</h3>
+                        <p>{selectedVerificationServiceOrder.folio || 'Sin folio'}</p>
+                      </div>
+                      <span className='verificationStatusBadge programmed'>
+                        {formatServiceOrderStatus(selectedVerificationServiceOrder.status)}
+                      </span>
+                    </div>
+
+                    <div className='verificationKeyValueGrid'>
+                      <div>
+                        <span>Cantidad</span>
+                        <strong>{selectedVerificationServiceOrder.quantity}</strong>
+                      </div>
+                      <div>
+                        <span>Programadas</span>
+                        <strong>
+                          {getServiceOrderProgrammedCount(selectedVerificationServiceOrder)}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Verificadas</span>
+                        <strong>
+                          {getServiceOrderVerifiedCount(selectedVerificationServiceOrder)}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Restan por programar</span>
+                        <strong>
+                          {getServiceOrderRemainingToProgram(selectedVerificationServiceOrder)}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Restan por verificar</span>
+                        <strong>
+                          {getServiceOrderRemainingToVerify(selectedVerificationServiceOrder)}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Programa RFID esperado</span>
+                        <strong>{selectedVerificationServiceOrder.rfidProgram || 'N/D'}</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </article>
           </div>
         </div>

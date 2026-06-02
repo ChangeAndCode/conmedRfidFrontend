@@ -57,6 +57,13 @@ export interface ReadTagIdResult {
   simulated?: boolean;
 }
 
+export interface ReadPayloadTextResult {
+  payloadText: string;
+  tagId?: string;
+  device?: HardwareDeviceSummary;
+  simulated?: boolean;
+}
+
 export interface WritePayloadRequest {
   connectionMethod: ConnectionMethod;
   deviceId: string;

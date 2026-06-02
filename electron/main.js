@@ -201,14 +201,135 @@ const buildSerialPortDescription = (portName, metadata, fallbackDescription) => 
 
 const getConfiguredHardwareCommand = (connectionMethod, action) => {
   if (connectionMethod === 'serial_port') {
-    return action === 'read'
-      ? process.env.CONMED_RFID_SERIAL_READ_TAG_COMMAND
-      : process.env.CONMED_RFID_SERIAL_WRITE_PAYLOAD_COMMAND
+    switch (action) {
+      case 'read_tag_id':
+        return process.env.CONMED_RFID_SERIAL_READ_TAG_COMMAND
+      case 'read_payload_text':
+        return process.env.CONMED_RFID_SERIAL_READ_PAYLOAD_TEXT_COMMAND
+      case 'write_payload':
+        return process.env.CONMED_RFID_SERIAL_WRITE_PAYLOAD_COMMAND
+      default:
+        return ''
+    }
   }
 
-  return action === 'read'
-    ? process.env.CONMED_RFID_ANDROID_READ_TAG_COMMAND
-    : process.env.CONMED_RFID_ANDROID_WRITE_PAYLOAD_COMMAND
+  switch (action) {
+    case 'read_tag_id':
+      return process.env.CONMED_RFID_ANDROID_READ_TAG_COMMAND
+    case 'read_payload_text':
+      return process.env.CONMED_RFID_ANDROID_READ_PAYLOAD_TEXT_COMMAND
+    case 'write_payload':
+      return process.env.CONMED_RFID_ANDROID_WRITE_PAYLOAD_COMMAND
+    default:
+      return ''
+  }
+}
+
+const pickFirstString = (...values) => {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim()
+    }
+  }
+
+  return ''
+}
+
+const parsePayloadReadObject = (value) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {
+      payloadText: '',
+      tagId: '',
+    }
+  }
+
+  return {
+    payloadText: pickFirstString(
+      value.payloadText,
+      value.rfidPayloadText,
+      value.payload,
+      value.rawText,
+      value.text,
+      value.content,
+    ),
+    tagId: pickFirstString(value.tagId, value.uid, value.epc),
+  }
+}
+
+const parsePayloadReadKeyValueLines = (lines) => {
+  const values = {}
+
+  lines.forEach((line) => {
+    const match = line.match(/^([^:=]+?)\s*[:=]\s*(.+)$/)
+
+    if (!match) {
+      return
+    }
+
+    const key = match[1]
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '')
+    const value = match[2].trim()
+
+    if (!key || !value) {
+      return
+    }
+
+    values[key] = value
+  })
+
+  return {
+    payloadText: pickFirstString(
+      values.payloadtext,
+      values.rfidpayloadtext,
+      values.payload,
+      values.rawtext,
+      values.text,
+      values.content,
+    ),
+    tagId: pickFirstString(values.tagid, values.uid, values.epc),
+  }
+}
+
+const parsePayloadReadOutput = (stdout) => {
+  const trimmedOutput = String(stdout ?? '').trim()
+
+  if (!trimmedOutput) {
+    return {
+      payloadText: '',
+      tagId: '',
+    }
+  }
+
+  try {
+    const parsedOutput = JSON.parse(trimmedOutput)
+    const payloadResult = Array.isArray(parsedOutput)
+      ? parsePayloadReadObject(parsedOutput[0])
+      : parsePayloadReadObject(parsedOutput)
+
+    if (payloadResult.payloadText || payloadResult.tagId) {
+      return payloadResult
+    }
+  } catch {
+    // Intentionally continue with line-based parsing.
+  }
+
+  const lines = trimmedOutput
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  const keyValuePayloadResult = parsePayloadReadKeyValueLines(lines)
+
+  if (keyValuePayloadResult.payloadText || keyValuePayloadResult.tagId) {
+    return keyValuePayloadResult
+  }
+
+  return {
+    payloadText: lines[0] ?? '',
+    tagId: lines[1] ?? '',
+  }
 }
 
 const resolveAdbExecutable = async () => {
@@ -466,7 +587,10 @@ const resolveDeviceForConnection = async (connectionMethod, deviceId) => {
 
 const performReadTagId = async (connectionMethod, deviceId) => {
   const resolvedDevice = await resolveDeviceForConnection(connectionMethod, deviceId)
-  const configuredCommand = getConfiguredHardwareCommand(connectionMethod, 'read')
+  const configuredCommand = getConfiguredHardwareCommand(
+    connectionMethod,
+    'read_tag_id',
+  )
 
   if (!configuredCommand) {
     if (!isSimulationEnabled) {
@@ -513,6 +637,64 @@ const performReadTagId = async (connectionMethod, deviceId) => {
   }
 }
 
+const performReadPayloadText = async (connectionMethod, deviceId) => {
+  const resolvedDevice = await resolveDeviceForConnection(connectionMethod, deviceId)
+  const configuredCommand = getConfiguredHardwareCommand(
+    connectionMethod,
+    'read_payload_text',
+  )
+
+  if (!configuredCommand) {
+    if (!isSimulationEnabled) {
+      throw new Error(
+        connectionMethod === 'android_usb_nfc'
+          ? 'El telefono fue detectado, pero falta configurar CONMED_RFID_ANDROID_READ_PAYLOAD_TEXT_COMMAND para leer el contenido RFID real.'
+          : 'El lector fue detectado, pero falta configurar CONMED_RFID_SERIAL_READ_PAYLOAD_TEXT_COMMAND para leer el contenido RFID real.',
+      )
+    }
+
+    const payloadSuffix = Date.now().toString(16).toUpperCase().slice(-8).padStart(8, '0')
+
+    return {
+      payloadText: `SIM-RFID-PAYLOAD-${payloadSuffix}`,
+      tagId: `SIMTAG${payloadSuffix}`,
+      device: {
+        ...resolvedDevice,
+        isSimulated: true,
+      },
+      simulated: true,
+    }
+  }
+
+  const stdout = await executeConfiguredHardwareCommand(configuredCommand, {
+    connectionMethod,
+    deviceId,
+    serialPortPath: resolvedDevice.serialPortPath ?? deviceId,
+    androidDeviceId: resolvedDevice.deviceId ?? deviceId,
+  })
+
+  const payloadResult = parsePayloadReadOutput(stdout)
+
+  if (!payloadResult.payloadText) {
+    throw new Error(
+      'El comando de lectura RFID no devolvio el contenido RFID esperado para la verificacion.',
+    )
+  }
+
+  if (!payloadResult.tagId) {
+    throw new Error(
+      'El comando de lectura RFID no devolvio el tagId esperado para la verificacion.',
+    )
+  }
+
+  return {
+    payloadText: payloadResult.payloadText,
+    tagId: payloadResult.tagId,
+    device: resolvedDevice,
+    simulated: false,
+  }
+}
+
 const performWritePayload = async (request) => {
   const resolvedDevice = await resolveDeviceForConnection(
     request.connectionMethod,
@@ -520,7 +702,7 @@ const performWritePayload = async (request) => {
   )
   const configuredCommand = getConfiguredHardwareCommand(
     request.connectionMethod,
-    'write',
+    'write_payload',
   )
 
   if (!configuredCommand) {
@@ -590,6 +772,13 @@ function registerRfidIpcHandlers() {
     'conmed-rfid:read-tag-id',
     async (_event, { connectionMethod, deviceId }) => {
       return performReadTagId(connectionMethod, deviceId)
+    },
+  )
+
+  ipcMain.handle(
+    'conmed-rfid:read-payload-text',
+    async (_event, { connectionMethod, deviceId }) => {
+      return performReadPayloadText(connectionMethod, deviceId)
     },
   )
 

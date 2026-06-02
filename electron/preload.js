@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('conmedRfidHardware', {
     ipcRenderer.invoke('conmed-rfid:connect-device', request),
   readTagId: (request) =>
     ipcRenderer.invoke('conmed-rfid:read-tag-id', request),
+  readPayloadText: (request) =>
+    ipcRenderer.invoke('conmed-rfid:read-payload-text', request),
   writePayload: (request) =>
     ipcRenderer.invoke('conmed-rfid:write-payload', request),
 })

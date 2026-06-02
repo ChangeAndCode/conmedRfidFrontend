@@ -1,6 +1,7 @@
 import type {
   ConnectionMethod,
   HardwareDeviceSummary,
+  ReadPayloadTextResult,
   ReadTagIdResult,
   WritePayloadRequest,
   WritePayloadResult,
@@ -79,6 +80,26 @@ export async function readHardwareTagId(
 
   return {
     tagId: `SIMTAG${tagSuffix}`,
+    device: buildSimulatedDevice(connectionMethod, deviceId),
+    simulated: true,
+  };
+}
+
+export async function readHardwarePayloadText(
+  connectionMethod: ConnectionMethod,
+  deviceId: string,
+): Promise<ReadPayloadTextResult> {
+  const bridge = getHardwareBridge();
+
+  if (bridge?.readPayloadText) {
+    return bridge.readPayloadText({ connectionMethod, deviceId });
+  }
+
+  const payloadSuffix = Date.now().toString(16).toUpperCase().slice(-8).padStart(8, '0');
+
+  return {
+    payloadText: `SIM-RFID-PAYLOAD-${payloadSuffix}`,
+    tagId: `SIMTAG${payloadSuffix}`,
     device: buildSimulatedDevice(connectionMethod, deviceId),
     simulated: true,
   };

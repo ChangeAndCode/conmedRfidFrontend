@@ -42,6 +42,8 @@ export interface ProgrammingVerificationData {
   rawScan?: string;
   firstBarcodeRaw?: string;
   secondBarcodeRaw?: string;
+  rfidPayloadText?: string;
+  tagId?: string;
 }
 
 export interface ProgrammingRecord {
@@ -84,8 +86,44 @@ export interface VerifyProgrammingRecordPayload {
   rawScan?: string;
   firstBarcodeRaw?: string;
   secondBarcodeRaw?: string;
+  rfidPayloadText?: string;
+  tagId?: string;
   verifiedBy?: string;
   verificationNotes?: string;
+}
+
+export interface ProgrammingRecordVerificationReportSummary {
+  exists: boolean;
+  canGenerate: boolean;
+  reportId: string | null;
+  status: VerificationReportStatus | null;
+  availableActions: VerificationReportAvailableActions | null;
+}
+
+export interface ResolvedVerificationRfidPayload {
+  rawText: string;
+  partNumber?: string;
+  rawPartNumber?: string;
+  lot?: string;
+  manufactureDate?: string;
+  tagId?: string;
+}
+
+export interface ResolveVerificationProgrammingRecordPayload
+  extends ResolveProgrammingRecordPayload {
+  serviceOrderId: string;
+  rfidPayloadText: string;
+  tagId: string;
+}
+
+export interface ResolveVerificationProgrammingRecordResponse {
+  message: string;
+  data: {
+    programmingRecord: ProgrammingRecord;
+    serviceOrder?: ServiceOrder;
+    rfidPayload: ResolvedVerificationRfidPayload;
+    verificationReport?: ProgrammingRecordVerificationReportSummary;
+  };
 }
 
 export interface ProgrammingRecordNormalizedInput extends ProgrammingRawSourceData {
@@ -114,13 +152,7 @@ export interface VerifyProgrammingRecordResponse {
   data: {
     programmingRecord: ProgrammingRecord;
     serviceOrder?: ServiceOrder;
-    verificationReport?: {
-      exists: boolean;
-      canGenerate: boolean;
-      reportId: string | null;
-      status: VerificationReportStatus | null;
-      availableActions: VerificationReportAvailableActions | null;
-    };
+    verificationReport?: ProgrammingRecordVerificationReportSummary;
   };
 }
 
