@@ -57,6 +57,18 @@
     gap: 20px;
 }
 
+.programmingConnectionGrid{
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    align-items: end;
+}
+
+.programmingConnectionActions{
+    align-self: end;
+}
+
 .programmingDashboardCard select{
     min-width: 180px;
     padding: 8px 12px;
@@ -102,6 +114,22 @@
     overflow-y: auto;
     background-color: #ececec;
     opacity: 1;
+}
+
+.rfidProgrammingModalSurface{
+    width: min(680px, calc(100vw - 40px));
+    height: auto;
+    min-height: 0;
+}
+
+.rfidProgrammingHeaderCopy{
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.rfidProgrammingHeaderCopy p{
+    color: #425163;
 }
 
 .modalHeader{
@@ -229,6 +257,10 @@
     justify-content: center;
     gap: 16px;
     flex-wrap: wrap;
+}
+
+.rfidProgrammingActionRowCompact{
+    margin-top: 8px;
 }
 
 @media (max-width: 768px){

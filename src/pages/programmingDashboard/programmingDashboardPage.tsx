@@ -1,9 +1,16 @@
 import '../../css/programmingDashboard.css';
+import '../../css/administratorDashboard.css';
 import '../../index.css';
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppSceneLayout from '../../components/appSceneLayout';
+import RfidProgrammingModal from '../../components/rfidProgrammingModal';
 import { createDoubleScanRead, resolveFirstDoubleScan } from '../../services/doubleScanService';
+import { createManualRead } from '../../services/manualReadService';
+import {
+  connectHardwareDevice,
+  listHardwareDevices,
+} from '../../services/rfidHardwareService';
 import { createSingleScanRead, resolveSingleScan } from '../../services/singleScanService';
 import {
   listOpenServiceOrdersByGtin,
@@ -12,6 +19,14 @@ import {
   listServiceOrders,
 } from '../../services/serviceOrderService';
 import type { DoubleScanReadResponse } from '../../types/DoubleScan';
+import type { ProgrammingRecordCaptureReference } from '../../types/ProgrammingRecord';
+import type {
+  ConnectionMethod,
+  HardwareDeviceSummary,
+  RfidProgrammingReadSummary,
+  RfidProgrammingSession,
+  CompleteProgrammingResponse,
+} from '../../types/RfidProgramming';
 import type { ServiceOrder, ServiceOrderPartConfigOption } from '../../types/ServiceOrder';
 import type { SingleScanReadResponse } from '../../types/SingleScan';
 
@@ -38,9 +53,27 @@ type SingleScanStep =
   | 'success'
   | 'error';
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+const DEFAULT_CONNECTION_METHOD: ConnectionMethod = 'serial_port';
 const PROGRAMMING_LIMIT_REACHED_MESSAGE =
   'La orden de servicio seleccionada ya alcanzo la cantidad objetivo de programacion.';
+
+const getConnectionMethodLabel = (connectionMethod: ConnectionMethod) =>
+  connectionMethod === 'serial_port' ? 'Lector por COM' : 'Android USB/NFC';
+
+const getHardwareDeviceStatusLabel = (
+  deviceStatus?: HardwareDeviceSummary['status'],
+) => {
+  switch (deviceStatus) {
+    case 'unauthorized':
+      return 'sin autorizar';
+    case 'offline':
+      return 'offline';
+    case 'connected':
+      return 'conectado';
+    default:
+      return null;
+  }
+};
 
 const formatGs1ManufactureDate = (value: string) => {
   if (!/^\d{6}$/.test(value)) {
@@ -59,6 +92,8 @@ const formatGs1ManufactureDate = (value: string) => {
 
   return `${fullYear}-${month}-${day}`;
 };
+
+const normalizeManualManufactureDate = (value: string) => value.replace(/\D/g, '').slice(0, 8);
 
 const getServiceOrderProgrammedCount = (serviceOrder?: ServiceOrder | null) =>
   serviceOrder?.programmedCount ?? 0;
@@ -122,7 +157,20 @@ const isProgrammingLimitReachedError = (error: unknown) =>
 
 function ProgrammingDashboardPage() {
   const navigate = useNavigate();
-  const [port, setPort] = useState('');
+  const [connectionMethod, setConnectionMethod] = useState<ConnectionMethod>(
+    DEFAULT_CONNECTION_METHOD,
+  );
+  const [availableDevices, setAvailableDevices] = useState<HardwareDeviceSummary[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState('');
+  const [connectedDevice, setConnectedDevice] = useState<HardwareDeviceSummary | null>(null);
+  const [isLoadingDevices, setIsLoadingDevices] = useState(false);
+  const [isConnectingDevice, setIsConnectingDevice] = useState(false);
+  const [hardwareMessage, setHardwareMessage] = useState<FeedbackMessage | null>(null);
+  const [pendingRfidSession, setPendingRfidSession] =
+    useState<RfidProgrammingSession | null>(null);
+  const [isRfidModalOpen, setIsRfidModalOpen] = useState(false);
+  const [rfidProgrammingMessage, setRfidProgrammingMessage] =
+    useState<FeedbackMessage | null>(null);
   const [mode, setMode] = useState<Mode>(null);
 
   const [isLoadingProgrammingOrders, setIsLoadingProgrammingOrders] = useState(false);
@@ -170,11 +218,9 @@ function ProgrammingDashboardPage() {
   const [doubleScanResult, setDoubleScanResult] = useState<DoubleScanReadResponse | null>(null);
 
   const firstBarcodeInputRef = useRef<HTMLInputElement>(null);
-  const serviceOrderSelectRef = useRef<HTMLSelectElement>(null);
   const partConfigSelectRef = useRef<HTMLSelectElement>(null);
   const secondBarcodeInputRef = useRef<HTMLInputElement>(null);
   const singleScanInputRef = useRef<HTMLInputElement>(null);
-  const singleScanServiceOrderSelectRef = useRef<HTMLSelectElement>(null);
   const singleScanPartNumberSelectRef = useRef<HTMLSelectElement>(null);
   const successResetTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const singleScanResetTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
@@ -195,9 +241,11 @@ function ProgrammingDashboardPage() {
   const selectedProgrammingServiceOrder = programmingOrderOptions.find(
     (serviceOrder) => serviceOrder._id === selectedProgrammingServiceOrderId,
   );
+  const selectedAvailableDevice =
+    availableDevices.find((device) => device.id === selectedDeviceId) ?? null;
   const hasSelectedProgrammingServiceOrder = Boolean(selectedProgrammingServiceOrderId);
-  const hasMultipleServiceOrderOptions = serviceOrderOptions.length > 1;
-  const hasMultipleSingleScanServiceOrderOptions = singleScanServiceOrderOptions.length > 1;
+  const hasPendingRfidSession = Boolean(pendingRfidSession);
+  const isHardwareReady = Boolean(connectedDevice);
 
   useEffect(() => {
     if (mode !== 'DoubleScan') {
@@ -210,11 +258,6 @@ function ProgrammingDashboardPage() {
       doubleScanStep === 'error'
     ) {
       firstBarcodeInputRef.current?.focus();
-      return;
-    }
-
-    if (doubleScanStep === 'selecting_service_order') {
-      serviceOrderSelectRef.current?.focus();
       return;
     }
 
@@ -242,11 +285,6 @@ function ProgrammingDashboardPage() {
       return;
     }
 
-    if (singleScanStep === 'selecting_service_order') {
-      singleScanServiceOrderSelectRef.current?.focus();
-      return;
-    }
-
     if (
       singleScanStep === 'selecting_part_config' ||
       singleScanStep === 'ready_to_submit'
@@ -267,7 +305,75 @@ function ProgrammingDashboardPage() {
     };
   }, []);
 
-  const loadProgrammingServiceOrders = async (
+  useEffect(() => {
+    let isCancelled = false;
+
+    void (async () => {
+      setIsLoadingDevices(true);
+      setHardwareMessage(null);
+
+      try {
+        const nextDevices = await listHardwareDevices(connectionMethod);
+
+        if (isCancelled) {
+          return;
+        }
+
+        setAvailableDevices(nextDevices);
+        setSelectedDeviceId((currentDeviceId) => {
+          if (
+            currentDeviceId &&
+            nextDevices.some((device) => device.id === currentDeviceId)
+          ) {
+            return currentDeviceId;
+          }
+
+          return nextDevices[0]?.id ?? '';
+        });
+
+        if (nextDevices.length === 0) {
+          setHardwareMessage({
+            type: 'info',
+            text: `No hay dispositivos disponibles para ${getConnectionMethodLabel(
+              connectionMethod,
+            )}.`,
+          });
+          return;
+        }
+
+        if (nextDevices.some((device) => device.status === 'unauthorized')) {
+          setHardwareMessage({
+            type: 'error',
+            text: 'ADB detecto un telefono Android, pero sigue sin autorizarse la depuracion USB.',
+          });
+        }
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        setAvailableDevices([]);
+        setSelectedDeviceId('');
+        setHardwareMessage({
+          type: 'error',
+          text:
+            error instanceof Error
+              ? error.message
+              : 'No se pudieron cargar los dispositivos RFID locales.',
+        });
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingDevices(false);
+        }
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [connectionMethod]);
+
+  const loadProgrammingServiceOrders = useCallback(async (
     preferredServiceOrderId = selectedProgrammingServiceOrderId,
   ) => {
     setIsLoadingProgrammingOrders(true);
@@ -318,7 +424,7 @@ function ProgrammingDashboardPage() {
     } finally {
       setIsLoadingProgrammingOrders(false);
     }
-  };
+  }, [selectedProgrammingServiceOrderId]);
 
   const handleProgrammingServiceOrderSelection = (
     nextServiceOrderId: string,
@@ -339,7 +445,105 @@ function ProgrammingDashboardPage() {
 
   useEffect(() => {
     void loadProgrammingServiceOrders();
-  }, []);
+  }, [loadProgrammingServiceOrders]);
+
+  const handleConnectionMethodChange = (nextMethod: ConnectionMethod) => {
+    setConnectionMethod(nextMethod);
+    setAvailableDevices([]);
+    setSelectedDeviceId('');
+    setConnectedDevice(null);
+    setHardwareMessage(null);
+    setRfidProgrammingMessage(null);
+  };
+
+  const handleRefreshDevices = async () => {
+    setIsLoadingDevices(true);
+    setHardwareMessage(null);
+
+    try {
+      const nextDevices = await listHardwareDevices(connectionMethod);
+      setAvailableDevices(nextDevices);
+
+      const preferredDeviceId =
+        nextDevices.find((device) => device.id === selectedDeviceId)?.id ??
+        nextDevices[0]?.id ??
+        '';
+      setSelectedDeviceId(preferredDeviceId);
+
+      if (nextDevices.length === 0) {
+        setConnectedDevice(null);
+        setHardwareMessage({
+          type: 'info',
+          text: `No se detectaron dispositivos para ${getConnectionMethodLabel(
+            connectionMethod,
+          )}.`,
+        });
+        return;
+      }
+
+      if (nextDevices.some((device) => device.status === 'unauthorized')) {
+        setConnectedDevice(null);
+        setHardwareMessage({
+          type: 'error',
+          text: 'ADB detecto un telefono Android, pero sigue sin autorizarse la depuracion USB.',
+        });
+        return;
+      }
+
+      setHardwareMessage({
+        type: 'success',
+        text: `${nextDevices.length} dispositivo(s) detectado(s).`,
+      });
+    } catch (error) {
+      setAvailableDevices([]);
+      setSelectedDeviceId('');
+      setConnectedDevice(null);
+      setHardwareMessage({
+        type: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'No se pudieron actualizar los dispositivos RFID.',
+      });
+    } finally {
+      setIsLoadingDevices(false);
+    }
+  };
+
+  const handleConnectDevice = async () => {
+    if (!selectedDeviceId) {
+      setHardwareMessage({
+        type: 'error',
+        text: 'Selecciona primero un dispositivo para continuar.',
+      });
+      return;
+    }
+
+    setIsConnectingDevice(true);
+    setHardwareMessage(null);
+
+    try {
+      const device = await connectHardwareDevice(connectionMethod, selectedDeviceId);
+      setConnectedDevice(device);
+      setHardwareMessage({
+        type: 'success',
+        text: device.isSimulated
+          ? `Conectado en modo simulado con ${device.name}.`
+          : `Conectado correctamente con ${device.name}.`,
+      });
+    } catch (error) {
+      setConnectedDevice(null);
+      setHardwareMessage({
+        type: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'No se pudo conectar el dispositivo RFID.',
+      });
+    } finally {
+      setIsConnectingDevice(false);
+    }
+  };
 
   const resetManualForm = () => {
     setPartNumber('');
@@ -398,6 +602,111 @@ function ProgrammingDashboardPage() {
     setDoubleScanNotes('');
   };
 
+  const beginRfidProgramming = (
+    sourceKind: RfidProgrammingSession['sourceKind'],
+    programmingRecord: ProgrammingRecordCaptureReference,
+    serviceOrder: ServiceOrder | undefined | null,
+    readSummary: RfidProgrammingReadSummary,
+  ) => {
+    if (!connectedDevice) {
+      throw new Error('No hay un dispositivo RFID conectado para continuar.');
+    }
+
+    clearSuccessResetTimeout();
+    clearSingleScanResetTimeout();
+    setPendingRfidSession({
+      programmingRecordId: programmingRecord.id,
+      programmingRecordMode: programmingRecord.mode,
+      programmingRecordStatus: programmingRecord.status,
+      sourceKind,
+      serviceOrderId: serviceOrder?._id ?? '',
+      serviceOrderFolio: serviceOrder?.folio,
+      connectionMethod,
+      device: connectedDevice,
+      readSummary,
+    });
+    setIsRfidModalOpen(true);
+    setMode(null);
+    setRfidProgrammingMessage({
+      type: 'info',
+      text: 'Lectura registrada. Continua con la programacion RFID.',
+    });
+  };
+
+  const handleClosePendingRfidModal = () => {
+    setIsRfidModalOpen(false);
+    setRfidProgrammingMessage({
+      type: 'info',
+      text: 'Hay una programacion RFID pendiente. Reanudala antes de capturar otra pieza.',
+    });
+  };
+
+  const handleRfidProgrammingCompleted = async (
+    result: CompleteProgrammingResponse,
+  ) => {
+    const completedSession = pendingRfidSession;
+
+    if (!completedSession) {
+      return;
+    }
+
+    setPendingRfidSession(null);
+    setIsRfidModalOpen(false);
+    setRfidProgrammingMessage({
+      type: 'success',
+      text: result.message ?? 'Etiqueta RFID programada correctamente.',
+    });
+
+    if (completedSession.sourceKind === 'manual') {
+      setLot('');
+      setManufactureDate('');
+      const didReloadManualServiceOrders = await loadManualServiceOrders();
+      await loadProgrammingServiceOrders(completedSession.serviceOrderId);
+
+      if (didReloadManualServiceOrders) {
+        setManualMessage({
+          type: 'success',
+          text: result.message ?? 'Etiqueta RFID programada correctamente.',
+        });
+      }
+
+      return;
+    }
+
+    if (completedSession.sourceKind === 'single_scan') {
+      setSingleScanStep('success');
+      setSingleScanMessage({
+        type: 'success',
+        text: result.message ?? 'Etiqueta RFID programada correctamente.',
+      });
+      await loadProgrammingServiceOrders(completedSession.serviceOrderId);
+
+      singleScanResetTimeoutRef.current = window.setTimeout(() => {
+        resetSingleScanForm();
+        setSingleScanMessage({
+          type: 'info',
+          text: 'Listo para el siguiente escaneo.',
+        });
+      }, 2200);
+
+      return;
+    }
+
+    setDoubleScanStep('success');
+    setDoubleScanMessage({
+      type: 'success',
+      text: result.message ?? 'Etiqueta RFID programada correctamente.',
+    });
+    await loadProgrammingServiceOrders(completedSession.serviceOrderId);
+
+    successResetTimeoutRef.current = window.setTimeout(() => {
+      resetDoubleScanCycle({
+        type: 'info',
+        text: 'Listo para la siguiente lectura.',
+      });
+    }, 2200);
+  };
+
   const loadManualServiceOrders = async () => {
     setIsLoadingManualServiceOrders(true);
     setManualMessage(null);
@@ -407,32 +716,36 @@ function ProgrammingDashboardPage() {
     setPartNumber('');
 
     try {
-     const serviceOrders = await listOpenManualServiceOrders();
+      if (!selectedProgrammingServiceOrderId) {
+        setManualMessage({
+          type: 'error',
+          text: 'Selecciona primero una orden de servicio en la pantalla principal.',
+        });
+        return false;
+      }
 
-     const availableServiceOrders =
-       filterServiceOrdersWithProgrammingCapacity(
-         serviceOrders.filter(
-           (serviceOrder) =>
-             serviceOrder._id === selectedProgrammingServiceOrderId,
-         ),
-       );
+      const serviceOrders = await listOpenManualServiceOrders();
+      const availableServiceOrders = filterServiceOrdersWithProgrammingCapacity(
+        serviceOrders.filter(
+          (serviceOrder) => serviceOrder._id === selectedProgrammingServiceOrderId,
+        ),
+      );
       setManualServiceOrderOptions(availableServiceOrders);
 
       if (availableServiceOrders.length === 0) {
         setManualMessage({
-          type: 'info',
+          type: 'error',
           text:
             serviceOrders.length === 0
               ? 'No hay ordenes de servicio manuales abiertas disponibles.'
-              : 'Las ordenes manuales encontradas ya alcanzaron la cantidad objetivo de programacion.',
+              : 'La orden seleccionada no corresponde a captura manual o ya alcanzo la cantidad objetivo de programacion.',
         });
         return true;
       }
 
-      setManualMessage({
-        type: 'info',
-        text: 'Selecciona primero la orden de servicio manual.',
-      });
+      const selectedServiceOrderId = availableServiceOrders[0]._id;
+      setSelectedManualServiceOrderId(selectedServiceOrderId);
+      await loadManualPartOptionsForServiceOrder(selectedServiceOrderId);
       return true;
     } catch (error) {
       setManualMessage({
@@ -472,6 +785,12 @@ function ProgrammingDashboardPage() {
     setSingleScanResult(null);
 
     try {
+      if (!selectedProgrammingServiceOrderId) {
+        throw new Error(
+          'Selecciona primero una orden de servicio en la pantalla principal.',
+        );
+      }
+
       const resolvedScan = await resolveSingleScan(trimmedRawScan);
       const serviceOrders = await listOpenServiceOrdersByGtin(
         resolvedScan.gtin,
@@ -497,24 +816,15 @@ function ProgrammingDashboardPage() {
           type: 'error',
           text:
             serviceOrders.length === 0
-              ? 'No hay ordenes de servicio single scan abiertas para el GTIN detectado.'
-              : 'Las ordenes single scan detectadas ya alcanzaron la cantidad objetivo de programacion.',
+              ? 'El GTIN detectado no corresponde a la orden de servicio seleccionada.'
+              : 'La orden seleccionada no corresponde al GTIN detectado o ya alcanzo la cantidad objetivo de programacion.',
         });
         return;
       }
 
-      if (availableServiceOrders.length === 1) {
-        const [singleServiceOrder] = availableServiceOrders;
-        setSelectedSingleScanServiceOrderId(singleServiceOrder._id);
-        await loadSingleScanPartOptionsForServiceOrder(singleServiceOrder._id);
-        return;
-      }
-
-      setSingleScanStep('selecting_service_order');
-      setSingleScanMessage({
-        type: 'info',
-        text: 'Se encontraron varias ordenes single scan para el GTIN. Selecciona la correcta.',
-      });
+      const [singleServiceOrder] = availableServiceOrders;
+      setSelectedSingleScanServiceOrderId(singleServiceOrder._id);
+      await loadSingleScanPartOptionsForServiceOrder(singleServiceOrder._id);
     } catch (error) {
       setSingleScanStep('waiting_scan');
       setSingleScanMessage({
@@ -542,7 +852,7 @@ function ProgrammingDashboardPage() {
       setDoubleScanOptions(options);
 
       if (options.length === 0) {
-        setDoubleScanStep('selecting_service_order');
+        setDoubleScanStep('waiting_first');
         setDoubleScanMessage({
           type: 'error',
           text: 'La orden seleccionada no tiene numeros de parte activos para doble codigo.',
@@ -566,7 +876,7 @@ function ProgrammingDashboardPage() {
         text: 'Selecciona el numero de parte correcto para la orden elegida.',
       });
     } catch (error) {
-      setDoubleScanStep('selecting_service_order');
+      setDoubleScanStep('waiting_first');
       setDoubleScanMessage({
         type: 'error',
         text:
@@ -625,7 +935,7 @@ function ProgrammingDashboardPage() {
       setSingleScanPartOptions(options);
 
       if (options.length === 0) {
-        setSingleScanStep('selecting_service_order');
+        setSingleScanStep('waiting_scan');
         setSingleScanMessage({
           type: 'error',
           text: 'La orden de servicio seleccionada no tiene numero de parte single scan activo.',
@@ -649,7 +959,7 @@ function ProgrammingDashboardPage() {
         text: 'Selecciona el numero de parte solicitado por la orden single scan.',
       });
     } catch (error) {
-      setSingleScanStep('selecting_service_order');
+      setSingleScanStep('waiting_scan');
       setSingleScanMessage({
         type: 'error',
         text:
@@ -663,6 +973,10 @@ function ProgrammingDashboardPage() {
   };
 
   const openManualModal = () => {
+    if (hasPendingRfidSession) {
+      return;
+    }
+
     resetManualForm();
     setIsProgrammingOrderLocked(true);
     setMode('Manual');
@@ -670,7 +984,7 @@ function ProgrammingDashboardPage() {
   };
 
   const closeManualModal = () => {
-    if (isSubmittingManual) {
+    if (isSubmittingManual || hasPendingRfidSession) {
       return;
     }
 
@@ -679,12 +993,20 @@ function ProgrammingDashboardPage() {
   };
 
   const openDoubleScanModal = () => {
+    if (hasPendingRfidSession) {
+      return;
+    }
+
     resetDoubleScanFlow();
     setIsProgrammingOrderLocked(true);
     setMode('DoubleScan');
   };
 
   const openSingleScanModal = () => {
+    if (hasPendingRfidSession) {
+      return;
+    }
+
     clearSingleScanResetTimeout();
     resetSingleScanForm();
     setIsProgrammingOrderLocked(true);
@@ -695,7 +1017,8 @@ function ProgrammingDashboardPage() {
     if (
       doubleScanStep === 'resolving_first' ||
       doubleScanStep === 'resolving_part_configs' ||
-      doubleScanStep === 'submitting'
+      doubleScanStep === 'submitting' ||
+      hasPendingRfidSession
     ) {
       return;
     }
@@ -705,7 +1028,7 @@ function ProgrammingDashboardPage() {
   };
 
   const closeSingleScanModal = () => {
-    if (isSubmittingSingleScan) {
+    if (isSubmittingSingleScan || hasPendingRfidSession) {
       return;
     }
 
@@ -718,7 +1041,7 @@ function ProgrammingDashboardPage() {
     event.preventDefault();
 
     const trimmedLot = lot.trim();
-    const trimmedManufactureDate = manufactureDate.trim();
+    const trimmedManufactureDate = normalizeManualManufactureDate(manufactureDate.trim());
 
     if (!partNumber || !selectedManualServiceOrderId) {
       setManualMessage({
@@ -741,7 +1064,7 @@ function ProgrammingDashboardPage() {
 
     try {
       const verificationReference = selectedManualServiceOrder?.folio?.trim() || undefined;
-      const payload = {
+      const result = await createManualRead({
         serviceOrderId: selectedManualServiceOrderId,
         partNumber,
         lot: trimmedLot || undefined,
@@ -750,35 +1073,23 @@ function ProgrammingDashboardPage() {
         filterLabel: selectedManualConfig?.filterLabel,
         rawReference: verificationReference,
         notes: 'captura manual',
-      };
-
-      const response = await fetch(`${API_URL}/api/manual-reads`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
       });
+      const programmingRecord = result.programmingRecord;
 
-      const result = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        throw new Error(result?.message ?? 'Error al guardar la lectura manual.');
+      if (!programmingRecord) {
+        throw new Error(
+          'La respuesta del backend no incluye el programming record de la lectura manual.',
+        );
       }
 
-      setLot('');
-      setManufactureDate('');
-      const didReloadManualServiceOrders = await loadManualServiceOrders();
-      await loadProgrammingServiceOrders(selectedManualServiceOrderId);
-
-      if (didReloadManualServiceOrders) {
-        setManualMessage({
-          type: 'success',
-          text:
-            result?.message ??
-            `Lectura manual registrada. Usa el folio ${selectedManualServiceOrder?.folio ?? ''} o el numero de parte para verificarla.`,
-        });
-      }
+      beginRfidProgramming('manual', programmingRecord, selectedManualServiceOrder, {
+        partNumber,
+        lot: trimmedLot || undefined,
+        manufactureDate: trimmedManufactureDate || undefined,
+        rfidProgram: selectedManualConfig?.rfidProgram,
+        filterLabel: selectedManualConfig?.filterLabel,
+        rawReference: verificationReference,
+      });
     } catch (error) {
       if (isProgrammingLimitReachedError(error) && selectedManualServiceOrderId) {
         setManualServiceOrderOptions((currentServiceOrders) =>
@@ -796,25 +1107,6 @@ function ProgrammingDashboardPage() {
     } finally {
       setIsSubmittingManual(false);
     }
-  };
-
-  const handleSingleScanServiceOrderSelection = async (nextServiceOrderId: string) => {
-    setSelectedSingleScanServiceOrderId(nextServiceOrderId);
-    setSingleScanPartOptions([]);
-    setSingleScanPartNumber('');
-    setSingleScanMessage(null);
-    setSingleScanResult(null);
-
-    if (!nextServiceOrderId) {
-      setSingleScanStep('selecting_service_order');
-      setSingleScanMessage({
-        type: 'info',
-        text: 'Selecciona una orden de servicio single scan para continuar.',
-      });
-      return;
-    }
-
-    await loadSingleScanPartOptionsForServiceOrder(nextServiceOrderId);
   };
 
   const handleSingleScanPartNumberSelection = (nextPartNumber: string) => {
@@ -891,18 +1183,36 @@ function ProgrammingDashboardPage() {
       setSingleScanResult(result.data ?? null);
       setSingleScanStep('success');
       setSingleScanMessage({
-        type: 'success',
-        text: result.message ?? 'Lectura single scan registrada.',
+        type: 'info',
+        text: 'Lectura single scan registrada. Continua con la programacion RFID.',
       });
-      await loadProgrammingServiceOrders(selectedSingleScanServiceOrderId);
+      const programmingRecord = result.programmingRecord;
 
-      singleScanResetTimeoutRef.current = window.setTimeout(() => {
-        resetSingleScanForm();
-        setSingleScanMessage({
-          type: 'info',
-          text: 'Listo para el siguiente escaneo.',
-        });
-      }, 2200);
+      if (!programmingRecord) {
+        throw new Error(
+          'La respuesta del backend no incluye el programming record de la lectura single scan.',
+        );
+      }
+
+      beginRfidProgramming(
+        'single_scan',
+        programmingRecord,
+        selectedSingleScanServiceOrder,
+        {
+          partNumber: singleScanPartNumber,
+          gtin: result.data?.gtin ?? singleScanResolvedGtin ?? undefined,
+          lot: result.data?.lot ?? singleScanResolvedLot ?? undefined,
+          manufactureDate:
+            result.data?.manufactureDate ??
+            singleScanResolvedManufactureDate ??
+            undefined,
+          rfidProgram:
+            result.data?.rfidProgram ?? selectedSingleScanConfig?.rfidProgram,
+          filterLabel:
+            result.data?.filterLabel ?? selectedSingleScanConfig?.filterLabel,
+          rawScan: trimmedRawScan,
+        },
+      );
     } catch (error) {
       if (isProgrammingLimitReachedError(error) && selectedSingleScanServiceOrderId) {
         setSingleScanServiceOrderOptions((currentServiceOrders) =>
@@ -945,13 +1255,17 @@ function ProgrammingDashboardPage() {
     setSecondBarcodeRaw('');
 
     try {
+      if (!selectedProgrammingServiceOrderId) {
+        throw new Error(
+          'Selecciona primero una orden de servicio en la pantalla principal.',
+        );
+      }
+
       const result = await resolveFirstDoubleScan(trimmedFirstBarcode);
       const matchingServiceOrders = await listOpenServiceOrdersByGtin(result.gtin);
-      const availableServiceOrders =
-      filterServiceOrdersWithProgrammingCapacity(
+      const availableServiceOrders = filterServiceOrdersWithProgrammingCapacity(
         matchingServiceOrders.filter(
-          (serviceOrder) =>
-            serviceOrder._id === selectedProgrammingServiceOrderId,
+          (serviceOrder) => serviceOrder._id === selectedProgrammingServiceOrderId,
         ),
       );
 
@@ -965,24 +1279,15 @@ function ProgrammingDashboardPage() {
           type: 'error',
           text:
             matchingServiceOrders.length === 0
-              ? 'No hay ordenes de servicio abiertas para el GTIN detectado.'
-              : 'Las ordenes detectadas ya alcanzaron la cantidad objetivo de programacion.',
+              ? 'El GTIN detectado no corresponde a la orden de servicio seleccionada.'
+              : 'La orden seleccionada no corresponde al GTIN detectado o ya alcanzo la cantidad objetivo de programacion.',
         });
         return;
       }
 
-      if (availableServiceOrders.length === 1) {
-        const [singleServiceOrder] = availableServiceOrders;
-        setSelectedServiceOrderId(singleServiceOrder._id);
-        await loadPartConfigOptionsForServiceOrder(singleServiceOrder._id);
-        return;
-      }
-
-      setDoubleScanStep('selecting_service_order');
-      setDoubleScanMessage({
-        type: 'info',
-        text: 'Se encontraron varias ordenes para el GTIN. Selecciona primero la orden de servicio.',
-      });
+      const [singleServiceOrder] = availableServiceOrders;
+      setSelectedServiceOrderId(singleServiceOrder._id);
+      await loadPartConfigOptionsForServiceOrder(singleServiceOrder._id);
     } catch (error) {
       setDoubleScanStep('waiting_first');
       setDoubleScanMessage({
@@ -999,42 +1304,6 @@ function ProgrammingDashboardPage() {
 
     event.preventDefault();
     await handleResolveFirstBarcode();
-  };
-
-  const handleManualServiceOrderSelection = (nextServiceOrderId: string) => {
-    setSelectedManualServiceOrderId(nextServiceOrderId);
-    setManualPartOptions([]);
-    setPartNumber('');
-    setManualMessage(null);
-
-    if (!nextServiceOrderId) {
-      setManualMessage({
-        type: 'info',
-        text: 'Selecciona una orden de servicio manual para continuar.',
-      });
-      return;
-    }
-
-    void loadManualPartOptionsForServiceOrder(nextServiceOrderId);
-  };
-
-  const handleServiceOrderSelection = async (nextServiceOrderId: string) => {
-    setSelectedServiceOrderId(nextServiceOrderId);
-    setDoubleScanOptions([]);
-    setSelectedPartConfigId('');
-    setSecondBarcodeRaw('');
-    setDoubleScanResult(null);
-
-    if (!nextServiceOrderId) {
-      setDoubleScanStep('selecting_service_order');
-      setDoubleScanMessage({
-        type: 'info',
-        text: 'Selecciona una orden de servicio antes de continuar.',
-      });
-      return;
-    }
-
-    await loadPartConfigOptionsForServiceOrder(nextServiceOrderId);
   };
 
   const handlePartConfigSelection = (nextPartConfigId: string) => {
@@ -1110,19 +1379,31 @@ function ProgrammingDashboardPage() {
       setDoubleScanResult(result.data ?? null);
       setDoubleScanStep('success');
       setDoubleScanMessage({
-        type: 'success',
-        text:
-          result.message ??
-          'Lectura doble registrada. El formulario se preparara automaticamente para la siguiente pieza.',
+        type: 'info',
+        text: 'Lectura doble registrada. Continua con la programacion RFID.',
       });
-      await loadProgrammingServiceOrders(selectedServiceOrderId);
+      const programmingRecord = result.programmingRecord;
 
-      successResetTimeoutRef.current = window.setTimeout(() => {
-        resetDoubleScanCycle({
-          type: 'info',
-          text: 'Listo para la siguiente lectura.',
-        });
-      }, 2200);
+      if (!programmingRecord) {
+        throw new Error(
+          'La respuesta del backend no incluye el programming record de la lectura doble.',
+        );
+      }
+
+      beginRfidProgramming('double_scan', programmingRecord, selectedServiceOrder, {
+        partNumber: result.data?.partNumber ?? selectedDoubleScanConfig?.partNumber,
+        gtin: result.data?.gtin ?? resolvedGtin ?? undefined,
+        lot: result.data?.lot,
+        manufactureDate: result.data?.manufactureDate,
+        rfidProgram:
+          result.data?.rfidProgram ??
+          selectedDoubleScanConfig?.rfidProgram ??
+          selectedServiceOrder?.rfidProgram,
+        filterLabel:
+          result.data?.filterLabel ?? selectedDoubleScanConfig?.filterLabel,
+        firstBarcodeRaw: trimmedFirstBarcode,
+        secondBarcodeRaw: trimmedSecondBarcode,
+      });
     } catch (error) {
       if (isProgrammingLimitReachedError(error) && selectedServiceOrderId) {
         setServiceOrderOptions((currentServiceOrders) =>
@@ -1164,6 +1445,19 @@ function ProgrammingDashboardPage() {
     doubleScanStep === 'resolving_first' ||
     doubleScanStep === 'resolving_part_configs' ||
     doubleScanStep === 'submitting';
+  const hardwareStatusText = isConnectingDevice
+    ? 'conectando dispositivo'
+    : isLoadingDevices
+      ? 'cargando dispositivos'
+      : connectedDevice
+        ? connectedDevice.isSimulated
+          ? 'conectado en modo simulado'
+          : 'conectado y listo para programar'
+        : 'sin conectar';
+  const currentDateTimeLabel = new Intl.DateTimeFormat('es-MX', {
+    dateStyle: 'medium',
+    timeStyle: 'medium',
+  }).format(new Date());
 
   return (
     <>
@@ -1172,98 +1466,210 @@ function ProgrammingDashboardPage() {
           <div className='generalBlock programmingDashboardCard'>
             <h1>ESTACION DE PROGRAMACION</h1>
             <div className='statusUser'>
-              <h2>serial port: {port || 'sin seleccionar'}</h2>
-              <h2>status: {port ? 'listo para escanear' : 'selecciona un serial port'}</h2>
-              <h2>fecha/hora: pendiente</h2>
+              <h2>{`metodo: ${getConnectionMethodLabel(connectionMethod)}`}</h2>
+              <h2>{`dispositivo: ${connectedDevice?.name ?? selectedAvailableDevice?.name ?? 'sin seleccionar'}`}</h2>
+              <h2>{`status: ${hardwareStatusText}`}</h2>
+              <h2>{`fecha/hora: ${currentDateTimeLabel}`}</h2>
             </div>
+
+            <div className='programmingConnectionGrid'>
+              <label className='modalField'>
+                <span>Metodo de conexion</span>
+                <select
+                  aria-label='connectionMethod'
+                  value={connectionMethod}
+                  onChange={(event) =>
+                    handleConnectionMethodChange(event.target.value as ConnectionMethod)
+                  }
+                  disabled={isLoadingDevices || isConnectingDevice || hasPendingRfidSession}
+                >
+                  <option value='serial_port'>Lector por COM</option>
+                  <option value='android_usb_nfc'>Android USB/NFC</option>
+                </select>
+              </label>
+
+              <label className='modalField'>
+                <span>Dispositivo</span>
+                <select
+                  aria-label='rfidDevice'
+                  value={selectedDeviceId}
+                  onChange={(event) => setSelectedDeviceId(event.target.value)}
+                  disabled={isLoadingDevices || isConnectingDevice || hasPendingRfidSession}
+                >
+                  <option value=''>Selecciona</option>
+                  {availableDevices.map((device) => (
+                    <option key={device.id} value={device.id}>
+                      {device.name}
+                      {device.isSimulated ? ' | simulado' : ''}
+                      {getHardwareDeviceStatusLabel(device.status)
+                        ? ` | ${getHardwareDeviceStatusLabel(device.status)}`
+                        : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className='modalActionRow programmingConnectionActions'>
+                <button
+                  className='adminPrimaryButton adminSecondaryButton'
+                  type='button'
+                  onClick={() => void handleRefreshDevices()}
+                  disabled={isLoadingDevices || isConnectingDevice || hasPendingRfidSession}
+                >
+                  {isLoadingDevices ? 'Buscando...' : 'Actualizar'}
+                </button>
+                <button
+                  className='adminPrimaryButton'
+                  type='button'
+                  onClick={() => void handleConnectDevice()}
+                  disabled={
+                    isLoadingDevices ||
+                    isConnectingDevice ||
+                    !selectedDeviceId ||
+                    hasPendingRfidSession
+                  }
+                >
+                  {isConnectingDevice ? 'Conectando...' : 'Conectar'}
+                </button>
+              </div>
+            </div>
+            {hardwareMessage && (
+              <p className={`manualMessage ${hardwareMessage.type}`}>
+                {hardwareMessage.text}
+              </p>
+            )}
+
+            {rfidProgrammingMessage && (
+              <p className={`manualMessage ${rfidProgrammingMessage.type}`}>
+                {rfidProgrammingMessage.text}
+              </p>
+            )}
+
+            {pendingRfidSession && !isRfidModalOpen && (
+              <div className='scanSummaryBlock'>
+                <p>{`Programacion pendiente para ${pendingRfidSession.serviceOrderFolio ?? 'sin folio'}`}</p>
+                <p>{`Programming record: ${pendingRfidSession.programmingRecordId}`}</p>
+                <p>{`Dispositivo asignado: ${pendingRfidSession.device.name}`}</p>
+                <div className='modalActionRow'>
+                  <button
+                    className='adminPrimaryButton'
+                    type='button'
+                    onClick={() => setIsRfidModalOpen(true)}
+                  >
+                    Reanudar programacion RFID
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div>
-              <h2>Serial Port</h2>
-              <select aria-label='SerialPort' value={port} onChange={(event) => setPort(event.target.value)}>
+              <h2>Orden de Servicio</h2>
+
+              <select
+                aria-label='programmingServiceOrderId'
+                value={selectedProgrammingServiceOrderId}
+                onChange={(event) =>
+                  handleProgrammingServiceOrderSelection(
+                    event.target.value,
+                  )
+                }
+                disabled={
+                  isLoadingProgrammingOrders ||
+                  isProgrammingOrderLocked ||
+                  hasPendingRfidSession
+                }
+              >
                 <option value=''>Selecciona</option>
-                <option value='port1'>COM 3</option>
-                <option value='port2'>COM 5</option>
+
+                {programmingOrderOptions.map((serviceOrder) => (
+                  <option
+                    key={serviceOrder._id}
+                    value={serviceOrder._id}
+                  >
+                    {serviceOrder.folio}
+                    {serviceOrder.rfidProgram
+                      ? ` | ${serviceOrder.rfidProgram}`
+                      : ''}
+                    {serviceOrder.partNumber
+                      ? ` | ${serviceOrder.partNumber}`
+                      : ''}
+                  </option>
+                ))}
               </select>
             </div>
-            <div>
-            <h2>Orden de Servicio</h2>
 
-            <select
-              aria-label='programmingServiceOrderId'
-              value={selectedProgrammingServiceOrderId}
-              onChange={(event) =>
-                handleProgrammingServiceOrderSelection(
-                  event.target.value,
-                )
-              }
-              disabled={isLoadingProgrammingOrders || isProgrammingOrderLocked}
-            >
-              <option value=''>Selecciona</option>
+            {selectedProgrammingServiceOrder && (
+              <div className='scanSummaryBlock'>
+                <p>
+                  Orden seleccionada:
+                  {' '}
+                  {selectedProgrammingServiceOrder.folio}
+                </p>
 
-              {programmingOrderOptions.map((serviceOrder) => (
-                <option
-                  key={serviceOrder._id}
-                  value={serviceOrder._id}
-                >
-                  {serviceOrder.folio}
-                  {serviceOrder.rfidProgram
-                    ? ` | ${serviceOrder.rfidProgram}`
-                    : ''}
-                  {serviceOrder.partNumber
-                    ? ` | ${serviceOrder.partNumber}`
-                    : ''}
-                </option>
-              ))}
-            </select>
-          </div>
+                <p>
+                  Cantidad planeada:
+                  {' '}
+                  {selectedProgrammingServiceOrder.quantity}
+                </p>
 
-        {selectedProgrammingServiceOrder && (
-          <div className='scanSummaryBlock'>
-            <p>
-              Orden seleccionada:
-              {' '}
-              {selectedProgrammingServiceOrder.folio}
-            </p>
+                <p>
+                  Programados:
+                  {' '}
+                  {getServiceOrderProgrammedCount(
+                    selectedProgrammingServiceOrder,
+                  )}
+                </p>
 
-            <p>
-              Cantidad planeada:
-              {' '}
-              {selectedProgrammingServiceOrder.quantity}
-            </p>
-
-            <p>
-              Programados:
-              {' '}
-              {getServiceOrderProgrammedCount(
-                selectedProgrammingServiceOrder,
-              )}
-            </p>
-
-            <p>
-              Restan por programar:
-              {' '}
-              {getServiceOrderRemainingToProgram(
-                selectedProgrammingServiceOrder,
-              )}
-            </p>
-            {isProgrammingOrderLocked && (
-              <p>Orden bloqueada hasta completar la cantidad objetivo.</p>
+                <p>
+                  Restan por programar:
+                  {' '}
+                  {getServiceOrderRemainingToProgram(
+                    selectedProgrammingServiceOrder,
+                  )}
+                </p>
+                {isProgrammingOrderLocked && (
+                  <p>Orden bloqueada hasta completar la cantidad objetivo.</p>
+                )}
+              </div>
             )}
-          </div>
-        )}
 
-        {programmingOrderMessage && (
-          <p className={`manualMessage ${programmingOrderMessage.type}`}>
-            {programmingOrderMessage.text}
-          </p>
-        )}
+            {programmingOrderMessage && (
+              <p className={`manualMessage ${programmingOrderMessage.type}`}>
+                {programmingOrderMessage.text}
+              </p>
+            )}
             <div className='buttonBox'>
-              <button className='adminPrimaryButton' onClick={openManualModal} disabled={!port || !hasSelectedProgrammingServiceOrder}>
+              <button
+                className='adminPrimaryButton'
+                onClick={openManualModal}
+                disabled={
+                  !isHardwareReady ||
+                  !hasSelectedProgrammingServiceOrder ||
+                  hasPendingRfidSession
+                }
+              >
                 Ingreso Manual
               </button>
-              <button className='adminPrimaryButton' onClick={openSingleScanModal} disabled={!port || !hasSelectedProgrammingServiceOrder}>
+              <button
+                className='adminPrimaryButton'
+                onClick={openSingleScanModal}
+                disabled={
+                  !isHardwareReady ||
+                  !hasSelectedProgrammingServiceOrder ||
+                  hasPendingRfidSession
+                }
+              >
                 Escaner Codigo
               </button>
-              <button className='adminPrimaryButton' onClick={openDoubleScanModal} disabled={!port || !hasSelectedProgrammingServiceOrder}>
+              <button
+                className='adminPrimaryButton'
+                onClick={openDoubleScanModal}
+                disabled={
+                  !isHardwareReady ||
+                  !hasSelectedProgrammingServiceOrder ||
+                  hasPendingRfidSession
+                }
+              >
                 Doble Codigo
               </button>
             </div>
@@ -1285,31 +1691,32 @@ function ProgrammingDashboardPage() {
             </div>
 
             <form className='modalForm' onSubmit={handleManualSubmit}>
-              <label className='modalField'>
-                <span>Orden de servicio:</span>
-                <select
-                  aria-label='manualServiceOrderId'
-                  value={selectedManualServiceOrderId}
-                  onChange={(event) => handleManualServiceOrderSelection(event.target.value)}
-                  disabled={isLoadingManualServiceOrders || isSubmittingManual}
-                  required
-                >
-                  <option value=''>Selecciona</option>
-                  {manualServiceOrderOptions.map((serviceOrder) => (
-                    <option key={serviceOrder._id} value={serviceOrder._id}>
-                      {serviceOrder.folio}
-                      {serviceOrder.rfidProgram ? ` | ${serviceOrder.rfidProgram}` : ''}
-                      {serviceOrder.partNumber ? ` | ${serviceOrder.partNumber}` : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
               {isLoadingManualServiceOrders && (
                 <p className='manualHint'>Cargando ordenes de servicio manuales...</p>
               )}
               {!isLoadingManualServiceOrders && manualServiceOrderOptions.length === 0 && !manualMessage && (
                 <p className='manualHint'>No hay ordenes manuales disponibles.</p>
+              )}
+
+              {selectedManualServiceOrder && (
+                <div className='scanSummaryBlock'>
+                  <p>Orden tomada de la pantalla principal: {selectedManualServiceOrder.folio}</p>
+                  <p>Cantidad planeada: {selectedManualServiceOrder.quantity}</p>
+                  <p>{`Programados: ${getServiceOrderProgrammedCount(selectedManualServiceOrder)}`}</p>
+                  <p>{`Verificados: ${getServiceOrderVerifiedCount(selectedManualServiceOrder)}`}</p>
+                  <p>{`Restan por programar: ${getServiceOrderRemainingToProgram(selectedManualServiceOrder)}`}</p>
+                  <p>{`Restan por verificar: ${getServiceOrderRemainingToVerify(selectedManualServiceOrder)}`}</p>
+                  {isServiceOrderProgrammingLimitReached(selectedManualServiceOrder) && (
+                    <p>{PROGRAMMING_LIMIT_REACHED_MESSAGE}</p>
+                  )}
+                  {selectedManualServiceOrder.partNumber && (
+                    <p>Numero de parte solicitado: {selectedManualServiceOrder.partNumber}</p>
+                  )}
+                  <p>{`Referencia sugerida para verificacion: ${selectedManualServiceOrder.folio}`}</p>
+                  {selectedManualServiceOrder.rfidProgram && (
+                    <p>Programa RFID esperado: {selectedManualServiceOrder.rfidProgram}</p>
+                  )}
+                </div>
               )}
 
               <label className='modalField'>
@@ -1337,27 +1744,6 @@ function ProgrammingDashboardPage() {
 
               {isLoadingManualPartOptions && (
                 <p className='manualHint'>Cargando numero de parte solicitado por la orden...</p>
-              )}
-
-              {selectedManualServiceOrder && (
-                <div className='scanSummaryBlock'>
-                  <p>Orden seleccionada: {selectedManualServiceOrder.folio}</p>
-                  <p>Cantidad planeada: {selectedManualServiceOrder.quantity}</p>
-                  <p>{`Programados: ${getServiceOrderProgrammedCount(selectedManualServiceOrder)}`}</p>
-                  <p>{`Verificados: ${getServiceOrderVerifiedCount(selectedManualServiceOrder)}`}</p>
-                  <p>{`Restan por programar: ${getServiceOrderRemainingToProgram(selectedManualServiceOrder)}`}</p>
-                  <p>{`Restan por verificar: ${getServiceOrderRemainingToVerify(selectedManualServiceOrder)}`}</p>
-                  {isServiceOrderProgrammingLimitReached(selectedManualServiceOrder) && (
-                    <p>{PROGRAMMING_LIMIT_REACHED_MESSAGE}</p>
-                  )}
-                  {selectedManualServiceOrder.partNumber && (
-                    <p>Numero de parte solicitado: {selectedManualServiceOrder.partNumber}</p>
-                  )}
-                  <p>{`Referencia sugerida para verificacion: ${selectedManualServiceOrder.folio}`}</p>
-                  {selectedManualServiceOrder.rfidProgram && (
-                    <p>Programa RFID esperado: {selectedManualServiceOrder.rfidProgram}</p>
-                  )}
-                </div>
               )}
 
               <label className='modalField'>
@@ -1474,31 +1860,9 @@ function ProgrammingDashboardPage() {
                 </div>
               )}
 
-              {serviceOrderOptions.length > 0 && (
-                <label className='modalField'>
-                  <span>Orden de servicio:</span>
-                  <select
-                    ref={serviceOrderSelectRef}
-                    aria-label='serviceOrderId'
-                    value={selectedServiceOrderId}
-                    onChange={(event) => void handleServiceOrderSelection(event.target.value)}
-                    disabled={isResolvingOrSubmitting}
-                    required
-                  >
-                    <option value=''>Selecciona una orden</option>
-                    {serviceOrderOptions.map((serviceOrderOption) => (
-                      <option key={serviceOrderOption._id} value={serviceOrderOption._id}>
-                        {serviceOrderOption.folio}
-                        {serviceOrderOption.rfidProgram ? ` | ${serviceOrderOption.rfidProgram}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-
               {selectedServiceOrder && (
                 <div className='scanSummaryBlock'>
-                  <p>Orden seleccionada: {selectedServiceOrder.folio}</p>
+                  <p>Orden tomada de la pantalla principal: {selectedServiceOrder.folio}</p>
                   <p>GTIN esperado: {selectedServiceOrder.gtin}</p>
                   <p>Programa RFID esperado: {selectedServiceOrder.rfidProgram}</p>
                   <p>Cantidad planeada: {selectedServiceOrder.quantity}</p>
@@ -1585,11 +1949,7 @@ function ProgrammingDashboardPage() {
               <p className='manualHint'>
                 {doubleScanStep === 'resolving_first'
                   ? 'Resolviendo el GTIN del primer codigo...'
-                  : doubleScanStep === 'selecting_service_order'
-                    ? hasMultipleServiceOrderOptions
-                      ? 'Selecciona la orden de servicio correcta para continuar.'
-                      : 'Orden de servicio detectada. Preparando opciones de numero de parte.'
-                    : doubleScanStep === 'resolving_part_configs'
+                  : doubleScanStep === 'resolving_part_configs'
                       ? 'Cargando numeros de parte para la orden seleccionada...'
                     : doubleScanStep === 'selecting_part_config'
                       ? 'Selecciona el numero de parte correcto para continuar.'
@@ -1721,32 +2081,6 @@ function ProgrammingDashboardPage() {
                 </div>
               )}
 
-              <label className='modalField'>
-                <span>Orden de servicio:</span>
-                <select
-                  ref={singleScanServiceOrderSelectRef}
-                  aria-label='singleScanServiceOrderId'
-                  value={selectedSingleScanServiceOrderId}
-                  onChange={(event) => void handleSingleScanServiceOrderSelection(event.target.value)}
-                  disabled={
-                    singleScanServiceOrderOptions.length === 0 ||
-                    isLoadingSingleScanServiceOrders ||
-                    isLoadingSingleScanPartOptions ||
-                    isSubmittingSingleScan
-                  }
-                  required
-                >
-                  <option value=''>Selecciona</option>
-                  {singleScanServiceOrderOptions.map((serviceOrder) => (
-                    <option key={serviceOrder._id} value={serviceOrder._id}>
-                      {serviceOrder.folio}
-                      {serviceOrder.rfidProgram ? ` | ${serviceOrder.rfidProgram}` : ''}
-                      {serviceOrder.partNumber ? ` | ${serviceOrder.partNumber}` : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
               {isLoadingSingleScanServiceOrders && (
                 <p className='manualHint'>Buscando ordenes single scan abiertas para el GTIN...</p>
               )}
@@ -1759,7 +2093,7 @@ function ProgrammingDashboardPage() {
 
               {selectedSingleScanServiceOrder && (
                 <div className='scanSummaryBlock'>
-                  <p>Orden seleccionada: {selectedSingleScanServiceOrder.folio}</p>
+                  <p>Orden tomada de la pantalla principal: {selectedSingleScanServiceOrder.folio}</p>
                   <p>Cantidad planeada: {selectedSingleScanServiceOrder.quantity}</p>
                   <p>{`Programados: ${getServiceOrderProgrammedCount(selectedSingleScanServiceOrder)}`}</p>
                   <p>{`Verificados: ${getServiceOrderVerifiedCount(selectedSingleScanServiceOrder)}`}</p>
@@ -1825,11 +2159,7 @@ function ProgrammingDashboardPage() {
               <p className='manualHint'>
                 {singleScanStep === 'resolving_scan'
                   ? 'Resolviendo GTIN, lote y fecha desde el escaneo...'
-                  : singleScanStep === 'selecting_service_order'
-                    ? hasMultipleSingleScanServiceOrderOptions
-                      ? 'Selecciona la orden de servicio correcta para continuar.'
-                      : 'Orden de servicio detectada. Preparando numero de parte.'
-                    : singleScanStep === 'resolving_part_configs'
+                  : singleScanStep === 'resolving_part_configs'
                       ? 'Cargando numeros de parte para la orden seleccionada...'
                     : singleScanStep === 'selecting_part_config'
                       ? 'Selecciona el numero de parte correcto para continuar.'
@@ -1903,6 +2233,15 @@ function ProgrammingDashboardPage() {
             </form>
           </div>
         </section>
+      )}
+
+      {pendingRfidSession && isRfidModalOpen && (
+        <RfidProgrammingModal
+          key={pendingRfidSession.programmingRecordId}
+          session={pendingRfidSession}
+          onClose={handleClosePendingRfidModal}
+          onCompleted={handleRfidProgrammingCompleted}
+        />
       )}
     </>
   );

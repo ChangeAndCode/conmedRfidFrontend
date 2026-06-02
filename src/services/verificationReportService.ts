@@ -130,6 +130,37 @@ export async function markVerificationReportPrintInterrupted(
   };
 }
 
+export async function markPublicVerificationReportPrintInterrupted(
+  id: string,
+  payload: UpdateVerificationReportStatusPayload = {},
+): Promise<VerificationReportMutationResponse> {
+  const response = await fetch(
+    `${API_URL}/api/public/verification-reports/${id}/print-interrupted`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+
+  const result = await parseVerificationReportResponse(response);
+
+  if (!response.ok) {
+    throw new Error(result?.message ?? 'No se pudo actualizar el reporte de verificacion.');
+  }
+
+  if (!result?.data) {
+    throw new Error('La respuesta del backend no incluye el reporte actualizado.');
+  }
+
+  return {
+    message: result.message ?? 'Reporte marcado con impresion interrumpida.',
+    data: result.data,
+  };
+}
+
 export async function markVerificationReportAsPrinted(
   id: string,
   payload: UpdateVerificationReportStatusPayload = {},
@@ -141,6 +172,37 @@ export async function markVerificationReportAsPrinted(
     }),
     body: JSON.stringify(payload),
   });
+
+  const result = await parseVerificationReportResponse(response);
+
+  if (!response.ok) {
+    throw new Error(result?.message ?? 'No se pudo actualizar el reporte de verificacion.');
+  }
+
+  if (!result?.data) {
+    throw new Error('La respuesta del backend no incluye el reporte actualizado.');
+  }
+
+  return {
+    message: result.message ?? 'Reporte marcado como impreso.',
+    data: result.data,
+  };
+}
+
+export async function markPublicVerificationReportAsPrinted(
+  id: string,
+  payload: UpdateVerificationReportStatusPayload = {},
+): Promise<VerificationReportMutationResponse> {
+  const response = await fetch(
+    `${API_URL}/api/public/verification-reports/${id}/print-completed`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    },
+  );
 
   const result = await parseVerificationReportResponse(response);
 

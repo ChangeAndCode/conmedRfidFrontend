@@ -76,6 +76,7 @@ function VerificationReportPrintModal({
   const printAttemptInProgressRef = useRef(false);
   const screenCopy = getScreenCopy(mode);
   const shouldShowInterruptionSelector = mode === 'print' && Boolean(onMarkPrintInterrupted);
+  const canReportInterruption = !isSubmitting && Boolean(selectedInterruptionId);
 
   useEffect(() => {
     const handleAfterPrint = () => {
@@ -98,7 +99,7 @@ function VerificationReportPrintModal({
   }, []);
 
   const handleOpenPrintDialog = useCallback(async () => {
-    if (isSubmitting) {
+    if (isSubmitting || hasAttemptedPrint) {
       return;
     }
 
@@ -110,7 +111,7 @@ function VerificationReportPrintModal({
 
     await waitForNextPaint();
     window.print();
-  }, [isSubmitting]);
+  }, [hasAttemptedPrint, isSubmitting]);
 
   useEffect(() => {
     if (!autoStart || autoStartRef.current) {
@@ -155,6 +156,11 @@ function VerificationReportPrintModal({
   const handleConfirmInterrupted = async () => {
     if (!onMarkPrintInterrupted) {
       onClose();
+      return;
+    }
+
+    if (!selectedInterruptionId) {
+      setErrorMessage('Selecciona una interrupcion antes de reportar la impresion fallida.');
       return;
     }
 
@@ -205,7 +211,7 @@ function VerificationReportPrintModal({
                 className='adminPrimaryButton'
                 type='button'
                 onClick={() => void handleOpenPrintDialog()}
-                disabled={isSubmitting}
+                disabled={isSubmitting || hasAttemptedPrint}
               >
                 {screenCopy.actionLabel}
               </button>
@@ -230,7 +236,7 @@ function VerificationReportPrintModal({
                     onChange={(event) => setSelectedInterruptionId(event.target.value)}
                     disabled={isSubmitting || isLoadingPrintInterruptions}
                   >
-                    <option value=''>Sin catalogar / opcional</option>
+                    <option value=''>Selecciona una interrupcion</option>
                     {printInterruptions.map((printInterruption) => (
                       <option key={printInterruption._id} value={printInterruption._id}>
                         {printInterruption.title}
@@ -240,7 +246,7 @@ function VerificationReportPrintModal({
                   <small className='adminFieldHint'>
                     {isLoadingPrintInterruptions
                       ? 'Cargando interrupciones disponibles...'
-                      : 'Selecciona una causa del catalogo si aplica.'}
+                      : 'Selecciona una causa del catalogo antes de marcar la impresion como fallida.'}
                   </small>
                 </label>
               )}
@@ -259,32 +265,16 @@ function VerificationReportPrintModal({
               {errorMessage && <div className='adminMessage error'>{errorMessage}</div>}
 
               <div className='verificationReportPrintOutcomeActions'>
-                <button
-                  className='adminPrimaryButton adminSecondaryButton'
-                  type='button'
-                  onClick={() => void handleOpenPrintDialog()}
-                  disabled={isSubmitting}
-                >
-                  Volver a abrir dialogo
-                </button>
                 {mode === 'print' && onMarkPrintInterrupted && (
                   <button
                     className='adminPrimaryButton adminSecondaryButton'
                     type='button'
                     onClick={() => void handleConfirmInterrupted()}
-                    disabled={isSubmitting}
+                    disabled={!canReportInterruption}
                   >
                     {isSubmitting ? 'Guardando...' : 'No, fallo'}
                   </button>
                 )}
-                <button
-                  className='adminPrimaryButton adminSecondaryButton'
-                  type='button'
-                  onClick={onClose}
-                  disabled={isSubmitting}
-                >
-                  Sin cambios
-                </button>
                 <button
                   className='adminPrimaryButton'
                   type='button'

@@ -1,4 +1,5 @@
 import type { ServiceOrder } from './ServiceOrder';
+import type { ProgrammingRecordCaptureReference } from './ProgrammingRecord';
 
 export interface CreateSingleScanPayload {
   serviceOrderId: string;
@@ -38,4 +39,5 @@ export interface SingleScanReadResponse {
 export interface CreateSingleScanResponse {
   message: string;
   data?: SingleScanReadResponse;
+  programmingRecord?: ProgrammingRecordCaptureReference;
 }

@@ -1,3 +1,5 @@
+import type { ProgrammingRecordCaptureReference } from './ProgrammingRecord';
+
 export interface DoubleScanResolvedPartConfigOption {
   id: string;
   partNumber: string;
@@ -42,4 +44,5 @@ export interface DoubleScanReadResponse {
 export interface CreateDoubleScanResponse {
   message: string;
   data?: DoubleScanReadResponse;
+  programmingRecord?: ProgrammingRecordCaptureReference;
 }

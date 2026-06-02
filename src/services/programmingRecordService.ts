@@ -4,6 +4,8 @@ import type {
   ProgrammingRecordListFilters,
   ResolveProgrammingRecordPayload,
   ResolveProgrammingRecordResponse,
+  ResolveVerificationProgrammingRecordPayload,
+  ResolveVerificationProgrammingRecordResponse,
   VerifyProgrammingRecordPayload,
   VerifyProgrammingRecordResponse,
 } from '../types/ProgrammingRecord';
@@ -93,6 +95,34 @@ export async function resolveProgrammingRecord(
 
   if (!result?.data) {
     throw new Error('La respuesta del backend no incluye la resolucion de programacion.');
+  }
+
+  return result;
+}
+
+export async function resolveVerificationProgrammingRecord(
+  payload: ResolveVerificationProgrammingRecordPayload,
+): Promise<ResolveVerificationProgrammingRecordResponse> {
+  const response = await fetch(`${API_URL}/api/programming-records/resolve-verification`, {
+    method: 'POST',
+    headers: buildAuthHeaders({
+      'Content-Type': 'application/json',
+    }),
+    body: JSON.stringify(payload),
+  });
+
+  const result = (await response.json().catch(() => null)) as
+    | ResolveVerificationProgrammingRecordResponse
+    | null;
+
+  if (!response.ok) {
+    throw new Error(result?.message ?? 'No se pudo resolver la verificacion RFID.');
+  }
+
+  if (!result?.data?.programmingRecord) {
+    throw new Error(
+      'La respuesta del backend no incluye el programming record resuelto para verificacion.',
+    );
   }
 
   return result;
