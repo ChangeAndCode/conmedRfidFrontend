@@ -336,6 +336,7 @@ const formatChangeRequestType = (requestType: ServiceOrderChangeRequest['request
   }
 };
 
+
 function AdministrationDashboardPage() {
   const navigate = useNavigate();
   const { isAdmin, isSupervisor, logout, user } = useAuth();
@@ -417,10 +418,17 @@ function AdministrationDashboardPage() {
     useState(false);
   const [isSubmittingPrintInterruptionDelete, setIsSubmittingPrintInterruptionDelete] =
     useState(false);
+  const [partNumberModeFilter, setPartNumberModeFilter] = useState<
+    PartConfig['readingMode'] | 'all'
+  >('all');
   const visibleSections = isSupervisor ? SUPERVISOR_SECTIONS : ADMIN_SECTIONS;
 
   const activeSectionConfig =
     visibleSections.find((section) => section.id === activeSection) ?? visibleSections[0];
+
+  const filteredPartConfigs = partConfigs.filter((config) =>
+    partNumberModeFilter === 'all' ? true : config.readingMode === partNumberModeFilter,
+  );
   const activePartConfigsCount = partConfigs.filter((config) => config.isActive).length;
   const inactivePartConfigsCount = partConfigs.length - activePartConfigsCount;
   const pendingChangeRequests = changeRequests.filter((request) => request.status === 'pending');
@@ -1582,7 +1590,28 @@ function AdministrationDashboardPage() {
 
   const renderPartNumbersSection = () => (
     <section className='adminSectionStack'>
-      <div className='adminToolbar'>
+      <div className='adminToolbar adminStickyToolbar'>
+        <div className='adminToolbarFilters'>
+          <label className='adminFilterLabel' htmlFor='partNumberModeFilter'>
+            Filtrar por modo
+          </label>
+
+          <select
+            className='adminFilterSelect'
+            id='partNumberModeFilter'
+            value={partNumberModeFilter}
+            onChange={(event) =>
+              setPartNumberModeFilter(
+                event.target.value as PartConfig['readingMode'] | 'all',
+              )
+            }
+          >
+            <option value='all'>Todos</option>
+            <option value='manual'>Manual</option>
+            <option value='single_scan'>Escaneo simple</option>
+            <option value='double_scan'>Doble lectura</option>
+          </select>
+        </div>
 
         <div className='adminToolbarActions'>
           <button
@@ -1605,12 +1634,12 @@ function AdministrationDashboardPage() {
         <div className='adminTableHeader'>
           <h3>Listado de configuraciones</h3>
           <p className='adminTableMeta'>
-            {isLoading ? 'Cargando...' : `${partConfigs.length} registros encontrados`}
+            {isLoading ? 'Cargando...' : `${filteredPartConfigs.length} registros encontrados`}
           </p>
         </div>
 
-        <div className='adminTableWrapper'>
-          <table className='adminTable'>
+        <div className='adminTableWrapper adminPartNumbersTableWrapper'>
+          <table className='adminTable adminPartNumbersTable'>
             <thead>
               <tr>
                 <th>Numero de parte</th>
@@ -1627,14 +1656,14 @@ function AdministrationDashboardPage() {
                     Cargando numeros de parte...
                   </td>
                 </tr>
-              ) : partConfigs.length === 0 ? (
+              ) : filteredPartConfigs.length === 0 ? (
                 <tr>
                   <td colSpan={5} className='adminTableEmpty'>
-                    No hay configuraciones registradas por mostrar.
+                    No hay configuraciones registradas para el filtro seleccionado.
                   </td>
                 </tr>
               ) : (
-                partConfigs.map((config) => (
+                filteredPartConfigs.map((config) => (
                   <tr key={config._id}>
                     <td>{config.partNumber}</td>
                     <td>{formatReadingMode(config.readingMode)}</td>
