@@ -1,5 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+let runtimeConfig = {}
+
+try {
+  runtimeConfig = ipcRenderer.sendSync('conmed-rfid:get-runtime-config')
+} catch {
+  runtimeConfig = {}
+}
+
+contextBridge.exposeInMainWorld('conmedRfidRuntimeConfig', runtimeConfig)
+
 contextBridge.exposeInMainWorld('conmedRfidHardware', {
   listDevices: (connectionMethod) =>
     ipcRenderer.invoke('conmed-rfid:list-devices', connectionMethod),

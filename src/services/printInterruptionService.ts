@@ -1,11 +1,10 @@
+import { API_BASE_URL as API_URL } from '../config/api';
 import type {
   PrintInterruption,
   PrintInterruptionMutationPayload,
   PrintInterruptionMutationResponse,
 } from '../types/PrintInterruption';
 import { buildAuthHeaders } from './authService';
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
 export async function listPrintInterruptions(): Promise<PrintInterruption[]> {
   const response = await fetch(`${API_URL}/api/print-interruptions`, {

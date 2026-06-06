@@ -1,3 +1,4 @@
+import { API_BASE_URL as API_URL } from '../config/api';
 import { buildAuthHeaders } from './authService';
 import type {
   CreateServiceOrderChangeRequestPayload,
@@ -12,8 +13,6 @@ import type {
   ServiceOrderStatus,
 } from '../types/ServiceOrder';
 import type { ReadingMode } from '../types/PartConfig';
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
 const buildQueryString = (params: Record<string, string | undefined>) => {
   const searchParams = new URLSearchParams();

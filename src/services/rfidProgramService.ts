@@ -1,11 +1,10 @@
+import { API_BASE_URL as API_URL } from '../config/api';
 import type {
   RfidProgram,
   RfidProgramMutationPayload,
   RfidProgramMutationResponse,
 } from '../types/RfidProgram';
 import { buildAuthHeaders } from './authService';
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
 export async function listRfidPrograms(): Promise<RfidProgram[]> {
   const response = await fetch(`${API_URL}/api/rfid-programs`, {

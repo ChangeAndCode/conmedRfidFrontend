@@ -1,6 +1,5 @@
+import { API_BASE_URL as API_URL } from '../config/api';
 import type { AuthSession, LoginCredentials, RegisterPayload, User } from '../types/Auth';
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 const AUTH_STORAGE_KEY = 'conmed-rfid-auth-session';
 
 export const buildAuthHeaders = (headers: Record<string, string> = {}) => {

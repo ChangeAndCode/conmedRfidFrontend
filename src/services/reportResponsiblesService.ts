@@ -1,11 +1,10 @@
+import { API_BASE_URL as API_URL } from '../config/api';
 import type {
   ReportResponsibles,
   ReportResponsiblesMutationPayload,
   ReportResponsiblesMutationResponse,
 } from '../types/ReportResponsibles';
 import { buildAuthHeaders } from './authService';
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
 export async function getReportResponsibles(): Promise<ReportResponsibles> {
   const response = await fetch(`${API_URL}/api/report-responsibles`, {

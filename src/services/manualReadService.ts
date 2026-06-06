@@ -1,9 +1,8 @@
+import { API_BASE_URL as API_URL } from '../config/api';
 import type {
   CreateManualReadPayload,
   CreateManualReadResponse,
 } from '../types/ManualRead';
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
 export async function createManualRead(
   payload: CreateManualReadPayload,
