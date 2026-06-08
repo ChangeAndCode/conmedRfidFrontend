@@ -47,6 +47,7 @@
     border-radius: 18px;
     background: linear-gradient(145deg, rgba(255, 255, 255, 0.78), rgba(229, 237, 247, 0.88));
     border: 1px solid rgba(16, 36, 62, 0.08);
+    font-size: .860rem;
 }
 .buttonBox{
     padding: 20px;
@@ -59,10 +60,11 @@
 
 .programmingConnectionGrid{
     width: 100%;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    display: flex;
     gap: 16px;
-    align-items: end;
+    align-items: center;
+    flex-direction: column;
+
 }
 
 .programmingConnectionActions{
@@ -257,6 +259,7 @@
     justify-content: center;
     gap: 16px;
     flex-wrap: wrap;
+    width: 100%;
 }
 
 .rfidProgrammingActionRowCompact{
