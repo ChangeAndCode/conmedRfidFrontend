@@ -20,9 +20,14 @@ interface ConmedRfidElectronApi {
   writePayload: (request: WritePayloadRequest) => Promise<WritePayloadResult>;
 }
 
+interface ConmedRfidRuntimeConfigApi {
+  apiBaseUrl?: string;
+}
+
 declare global {
   interface Window {
     conmedRfidHardware?: ConmedRfidElectronApi;
+    conmedRfidRuntimeConfig?: ConmedRfidRuntimeConfigApi;
   }
 }
 

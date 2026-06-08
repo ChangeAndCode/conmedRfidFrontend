@@ -1,12 +1,10 @@
+import { API_BASE_URL } from '../config/api';
 import type {
   Responsible,
   ResponsibleMutationPayload,
   ResponsiblesListResponse,
 } from "../types/Responsible";
 import { buildAuthHeaders } from "./authService";
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 const getAuthHeaders = () =>
   buildAuthHeaders({

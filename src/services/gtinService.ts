@@ -1,7 +1,6 @@
+import { API_BASE_URL as API_URL } from '../config/api';
 import type { Gtin, GtinMutationPayload, GtinMutationResponse } from '../types/Gtin';
 import { buildAuthHeaders } from './authService';
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
 export async function listGtins(): Promise<Gtin[]> {
   const response = await fetch(`${API_URL}/api/gtins`, {

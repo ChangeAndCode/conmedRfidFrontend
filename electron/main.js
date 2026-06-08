@@ -77,6 +77,23 @@ const loadDotEnvFile = () => {
 
 loadDotEnvFile()
 
+const DEFAULT_API_BASE_URL = 'http://localhost:3000'
+
+const normalizeApiBaseUrl = (value) => {
+  const trimmedValue = String(value ?? '').trim()
+
+  if (!trimmedValue) {
+    return ''
+  }
+
+  return trimmedValue.replace(/\/+$/, '')
+}
+
+const resolveRendererApiBaseUrl = () =>
+  normalizeApiBaseUrl(process.env.CONMED_RFID_API_URL) ||
+  normalizeApiBaseUrl(process.env.VITE_API_URL) ||
+  DEFAULT_API_BASE_URL
+
 const isSimulationEnabled = process.env.CONMED_RFID_ENABLE_SIMULATION !== 'false'
 
 const buildSimulatedDevice = (connectionMethod, deviceId) => {
@@ -817,6 +834,12 @@ function createWindow() {
 }
 
 function registerRfidIpcHandlers() {
+  ipcMain.on('conmed-rfid:get-runtime-config', (event) => {
+    event.returnValue = {
+      apiBaseUrl: resolveRendererApiBaseUrl(),
+    }
+  })
+
   ipcMain.handle('conmed-rfid:list-devices', async (_event, connectionMethod) => {
     return listHardwareDevices(connectionMethod)
   })

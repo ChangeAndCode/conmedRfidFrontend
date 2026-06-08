@@ -1,11 +1,10 @@
+import { API_BASE_URL as API_URL } from '../config/api';
 import type {
   CreateSingleScanPayload,
   CreateSingleScanResponse,
   ResolveSingleScanData,
   ResolveSingleScanResponse,
 } from '../types/SingleScan';
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
 export async function resolveSingleScan(rawScan: string): Promise<ResolveSingleScanData> {
   const response = await fetch(`${API_URL}/api/single-scan-reads/resolve`, {

@@ -1,3 +1,4 @@
+import { API_BASE_URL as API_URL } from '../config/api';
 import { buildAuthHeaders } from './authService';
 import type {
   BuildRfidPayloadData,
@@ -5,8 +6,6 @@ import type {
   CompleteProgrammingPayload,
   CompleteProgrammingResponse,
 } from '../types/RfidProgramming';
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
 export async function buildRfidPayload(
   programmingRecordId: string,
