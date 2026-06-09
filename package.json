@@ -12,11 +12,13 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "electron": "electron .",
+    "test:rfid": "node --test electron/rfid/stpv3Protocol.test.js",
     "dist": "npm run dist:portable",
     "dist:portable": "npm run build && electron-builder --win portable",
     "dist:win": "npm run build && electron-builder --win nsis"
   },
   "dependencies": {
+    "serialport": "^13.0.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.14.0"

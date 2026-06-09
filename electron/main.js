@@ -269,6 +269,48 @@ const getConfiguredHardwareCommand = (connectionMethod, action) => {
   }
 }
 
+let serialRfidReaderModule = null
+
+const getSerialRfidReader = async () => {
+  if (!serialRfidReaderModule) {
+    serialRfidReaderModule = await import('./rfid/serialRfidReader.js')
+  }
+
+  return serialRfidReaderModule
+}
+
+const shouldUseNativeSerialReader = (action) =>
+  !getConfiguredHardwareCommand('serial_port', action)
+
+const resolveSerialPortPath = (resolvedDevice, deviceId) =>
+  resolvedDevice.serialPortPath ?? deviceId
+
+const mapSerialRfidError = (error) => {
+  if (!(error instanceof Error)) {
+    return new Error('No se pudo completar la operacion RFID por COM.')
+  }
+
+  if (error.message.includes('No Tag in Field')) {
+    return new Error('No hay etiqueta en el campo del lector. Acercala e intenta de nuevo.')
+  }
+
+  if (error.message.includes('Board connection error')) {
+    return new Error(
+      'No se pudo comunicar con el lector RFID. Verifica el cable, el puerto COM y el driver CP210x.',
+    )
+  }
+
+  return error
+}
+
+const runNativeSerialOperation = async (operation) => {
+  try {
+    return await operation(await getSerialRfidReader())
+  } catch (error) {
+    throw mapSerialRfidError(error)
+  }
+}
+
 const pickFirstString = (...values) => {
   for (const value of values) {
     if (typeof value === 'string' && value.trim()) {
@@ -665,6 +707,18 @@ const performReadTagId = async (connectionMethod, deviceId) => {
   )
 
   if (!configuredCommand) {
+    if (connectionMethod === 'serial_port' && shouldUseNativeSerialReader('read_tag_id')) {
+      const tagId = await runNativeSerialOperation(async ({ readSerialTagId }) =>
+        readSerialTagId(resolveSerialPortPath(resolvedDevice, deviceId)),
+      )
+
+      return {
+        tagId,
+        device: resolvedDevice,
+        simulated: false,
+      }
+    }
+
     if (!isSimulationEnabled) {
       throw new Error(
         connectionMethod === 'android_usb_nfc'
@@ -717,6 +771,19 @@ const performReadPayloadText = async (connectionMethod, deviceId) => {
   )
 
   if (!configuredCommand) {
+    if (connectionMethod === 'serial_port' && shouldUseNativeSerialReader('read_payload_text')) {
+      const readResult = await runNativeSerialOperation(async ({ readSerialPayloadHex }) =>
+        readSerialPayloadHex(resolveSerialPortPath(resolvedDevice, deviceId)),
+      )
+
+      return {
+        payloadText: readResult.payloadHex,
+        tagId: readResult.tagId,
+        device: resolvedDevice,
+        simulated: false,
+      }
+    }
+
     if (!isSimulationEnabled) {
       throw new Error(
         connectionMethod === 'android_usb_nfc'
@@ -778,6 +845,23 @@ const performWritePayload = async (request) => {
   )
 
   if (!configuredCommand) {
+    if (request.connectionMethod === 'serial_port' && shouldUseNativeSerialReader('write_payload')) {
+      const writeResult = await runNativeSerialOperation(async ({ writeSerialPayloadHex }) =>
+        writeSerialPayloadHex(
+          resolveSerialPortPath(resolvedDevice, request.deviceId),
+          request.tagId,
+          request.payloadHex,
+        ),
+      )
+
+      return {
+        success: true,
+        message: writeResult.message,
+        simulated: false,
+        device: resolvedDevice,
+      }
+    }
+
     if (!isSimulationEnabled) {
       throw new Error(
         request.connectionMethod === 'android_usb_nfc'
