@@ -11,7 +11,6 @@ export interface PartConfig {
   expectedLotLength?: number;
   lotTrimRight?: number;
   isActive: boolean;
-  notes?: string;
   createdAt?: string;
   updatedAt?: string;
   createdBy?: string;
@@ -28,11 +27,9 @@ export interface PartConfigMutationPayload {
   readingMode: ReadingMode;
   rfidProgram?: string;
   expectedGtin?: string;
-  filterLabel?: string;
   expectedLotLength?: number;
   lotTrimRight?: number;
   isActive?: boolean;
-  notes?: string;
 }
 
 export interface PartConfigMutationResponse {

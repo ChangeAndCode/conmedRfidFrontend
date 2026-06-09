@@ -9,10 +9,8 @@ type PartConfigFormValues = {
   readingMode: ReadingMode;
   rfidProgram: string;
   expectedGtin: string;
-  filterLabel: string;
   expectedLotLength: string;
   isActive: boolean;
-  notes: string;
 };
 
 type PartConfigFormModalProps = {
@@ -34,10 +32,8 @@ const INITIAL_VALUES: PartConfigFormValues = {
   readingMode: 'manual',
   rfidProgram: '',
   expectedGtin: '',
-  filterLabel: '',
   expectedLotLength: '',
   isActive: true,
-  notes: '',
 };
 
 const buildFormValues = (initialData?: Partial<PartConfig>): PartConfigFormValues => ({
@@ -46,11 +42,9 @@ const buildFormValues = (initialData?: Partial<PartConfig>): PartConfigFormValue
   readingMode: initialData?.readingMode ?? 'manual',
   rfidProgram: initialData?.rfidProgram ?? '',
   expectedGtin: initialData?.expectedGtin ?? '',
-  filterLabel: initialData?.filterLabel ?? '',
   expectedLotLength:
     initialData?.expectedLotLength === undefined ? '' : String(initialData.expectedLotLength),
   isActive: initialData?.isActive ?? true,
-  notes: initialData?.notes ?? '',
 });
 
 function PartConfigFormModal({
@@ -91,8 +85,6 @@ function PartConfigFormModal({
     const trimmedDescription = values.description.trim();
     const trimmedRfidProgram = values.rfidProgram.trim();
     const rawExpectedGtin = values.expectedGtin.trim();
-    const trimmedFilterLabel = values.filterLabel.trim();
-    const trimmedNotes = values.notes.trim();
     const trimmedExpectedLotLength = values.expectedLotLength.trim();
 
     if (!trimmedPartNumber) {
@@ -161,10 +153,8 @@ function PartConfigFormModal({
         readingMode: values.readingMode,
         rfidProgram: trimmedRfidProgram || undefined,
         expectedGtin: rawExpectedGtin || undefined,
-        filterLabel: trimmedFilterLabel || undefined,
         expectedLotLength: parsedExpectedLotLength,
         isActive: values.isActive,
-        notes: trimmedNotes || undefined,
       });
     } catch (error) {
       setErrorMessage(
@@ -298,22 +288,6 @@ function PartConfigFormModal({
             </label>
 
             <label className='adminField'>
-              <span>Etiqueta de filtro</span>
-              <input
-                type='text'
-                value={values.filterLabel}
-                onChange={(event) =>
-                  setValues((currentValues) => ({
-                    ...currentValues,
-                    filterLabel: event.target.value,
-                  }))
-                }
-                placeholder='P000027957'
-                disabled={isSubmitting || isCopyMode}
-              />
-            </label>
-
-            <label className='adminField'>
               <span>Longitud esperada del lote</span>
               <input
                 type='number'
@@ -330,21 +304,6 @@ function PartConfigFormModal({
               />
             </label>
 
-            <label className='adminField adminFieldFull'>
-              <span>Notas</span>
-              <textarea
-                value={values.notes}
-                onChange={(event) =>
-                  setValues((currentValues) => ({
-                    ...currentValues,
-                    notes: event.target.value,
-                  }))
-                }
-                placeholder='Notas opcionales'
-                disabled={isSubmitting || isCopyMode}
-                rows={4}
-              />
-            </label>
           </div>
 
           <label className='adminCheckboxRow'>
